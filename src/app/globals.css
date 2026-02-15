@@ -1,26 +1,118 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --color-background: #F2EFEA;
+  --color-foreground: #000000;
+  --font-pixel: "VT323", "Geneva", "Chicago", monospace;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* Mac palette */
+  --color-mac-cream: #F2EFEA;
+  --color-mac-white: #FFFFFF;
+  --color-mac-black: #000000;
+  --color-mac-gray: #A8A8A8;
+  --color-mac-light-gray: #D5D5D5;
+  --color-mac-dark-gray: #555555;
+  --color-mac-highlight: #000080;
+  --color-mac-highlight-text: #FFFFFF;
+
+  /* Health status colors - adapted for light background */
+  --color-health-healthy: #007700;
+  --color-health-degraded: #886600;
+  --color-health-critical: #CC0000;
+  --color-health-offline: #666666;
+
+  /* Severity colors */
+  --color-severity-low: #0055CC;
+  --color-severity-medium: #886600;
+  --color-severity-high: #CC6600;
+  --color-severity-critical: #CC0000;
+
+  /* Agent stage colors */
+  --color-stage-idle: #666666;
+  --color-stage-running: #007700;
+  --color-stage-blocked: #CC6600;
+  --color-stage-completed: #0055CC;
+  --color-stage-error: #CC0000;
+
+  /* Priority colors */
+  --color-priority-low: #666666;
+  --color-priority-medium: #886600;
+  --color-priority-high: #CC6600;
+  --color-priority-urgent: #CC0000;
+
+  /* Task/problem status colors */
+  --color-status-pending: #666666;
+  --color-status-in-progress: #0055CC;
+  --color-status-waiting-on-agent: #7722AA;
+  --color-status-waiting-on-human: #AA7700;
+  --color-status-completed: #007700;
+  --color-status-cancelled: #666666;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: #F2EFEA;
+  color: #000000;
+  font-family: "Geneva", "Chicago", system-ui, sans-serif;
+  -webkit-font-smoothing: none;
+  -moz-osx-font-smoothing: unset;
+}
+
+/* Mac Window */
+.mac-window {
+  border: 2px solid #000;
+  background: #fff;
+  box-shadow: 2px 2px 0px #555;
+}
+
+/* Striped Title Bar */
+.mac-title-bar {
+  background: repeating-linear-gradient(
+    to bottom,
+    #fff 0px, #fff 1px,
+    #000 1px, #000 2px,
+    #fff 2px, #fff 3px,
+    #000 3px, #000 4px,
+    #fff 4px, #fff 5px
+  );
+  height: 20px;
+  border-bottom: 2px solid #000;
+  display: flex;
+  align-items: center;
+  padding: 0 4px;
+  position: relative;
+}
+
+.mac-title-bar-title {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #fff;
+  padding: 0 6px;
+  font-size: 12px;
+  font-weight: bold;
+  font-family: "VT323", "Geneva", "Chicago", monospace;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+/* Close Box */
+.mac-close-box {
+  width: 12px;
+  height: 12px;
+  border: 1px solid #000;
+  background: #fff;
+  cursor: pointer;
+  flex-shrink: 0;
+  z-index: 1;
+}
+
+.mac-close-box:hover {
+  background: #000;
+}
+
+/* Inset Input Style */
+.mac-inset {
+  border: 1px solid #000;
+  box-shadow: inset 1px 1px 0px #555;
+  background: #fff;
 }
