@@ -131,11 +131,11 @@ export function TaskDetailDrawer({ task, open, onClose }: TaskDetailDrawerProps)
       }`}
     >
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="absolute inset-0 glass-overlay" onClick={onClose} />
 
       {/* Drawer panel */}
       <div
-        className={`absolute right-0 top-0 h-full w-full sm:w-[480px] sm:border-l-2 border-mac-black bg-mac-white flex flex-col transition-transform duration-200 ${
+        className={`absolute right-0 top-0 h-full w-full sm:w-[480px] sm:border-l border-mac-border-strong bg-mac-white flex flex-col shadow-[−4px_0_16px_rgba(74,78,105,0.12)] transition-transform duration-200 ${
           open ? "translate-x-0" : "translate-x-full"
         }`}
       >
@@ -150,7 +150,7 @@ export function TaskDetailDrawer({ task, open, onClose }: TaskDetailDrawerProps)
         {task && (
           <>
             {/* Header section */}
-            <div className="shrink-0 border-b border-mac-black p-4 font-[family-name:var(--font-pixel)]">
+            <div className="shrink-0 border-b border-mac-border p-4 font-[family-name:var(--font-pixel)]">
               <div className="flex items-center gap-2 mb-2">
                 <Badge variant="status" value={task.status} />
                 <Badge variant="priority" value={task.priority} />
@@ -177,15 +177,15 @@ export function TaskDetailDrawer({ task, open, onClose }: TaskDetailDrawerProps)
             </div>
 
             {/* Tab bar */}
-            <div className="shrink-0 flex border-b border-mac-black font-[family-name:var(--font-pixel)]">
+            <div className="shrink-0 flex border-b border-mac-border font-[family-name:var(--font-pixel)]">
               {tabs.map((tab) => (
                 <button
                   key={tab.key}
                   onClick={() => setActiveTab(tab.key)}
-                  className={`flex-1 px-3 py-2 text-sm font-bold transition-colors ${
+                  className={`flex-1 px-3 py-2 text-sm font-bold transition-colors duration-150 ${
                     activeTab === tab.key
                       ? "border-b-2 border-mac-highlight text-mac-highlight bg-mac-white"
-                      : "text-mac-dark-gray hover:bg-mac-light-gray"
+                      : "text-mac-dark-gray hover:bg-mac-highlight-soft"
                   }`}
                 >
                   {tab.label}
@@ -204,7 +204,7 @@ export function TaskDetailDrawer({ task, open, onClose }: TaskDetailDrawerProps)
             </div>
 
             {/* Actions footer */}
-            <div className="shrink-0 border-t border-mac-black p-4 font-[family-name:var(--font-pixel)]">
+            <div className="shrink-0 border-t border-mac-border p-4 font-[family-name:var(--font-pixel)]">
               <div className="flex gap-3">
                 <div className="flex-1">
                   <Select

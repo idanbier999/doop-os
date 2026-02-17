@@ -54,9 +54,9 @@ export function CommentForm({ taskId }: CommentFormProps) {
         onChange={(e) => setContent(e.target.value)}
         placeholder="Add a comment..."
         rows={3}
-        className="mac-inset w-full resize-none px-2 py-1.5 text-sm text-mac-black placeholder:text-mac-gray focus:outline-none focus:ring-2 focus:ring-mac-black font-[family-name:var(--font-pixel)]"
+        className="mac-inset w-full resize-none rounded-md px-2 py-1.5 text-sm text-mac-black placeholder:text-mac-gray focus:outline-none focus:ring-2 focus:ring-mac-highlight/50 font-[family-name:var(--font-pixel)]"
       />
-      {error && <p className="text-xs text-[#CC0000] font-[family-name:var(--font-pixel)]">{error}</p>}
+      {error && <p className="text-xs text-severity-critical font-[family-name:var(--font-pixel)]">{error}</p>}
       <div className="flex justify-end">
         <Button
           type="submit"

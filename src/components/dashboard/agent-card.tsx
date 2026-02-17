@@ -21,13 +21,13 @@ export function AgentCard({ agent }: AgentCardProps) {
   return (
     <Link
       href={`/dashboard/agents/${agent.id}`}
-      className="block rounded-lg border border-gray-800 bg-gray-900 p-3 transition-colors hover:border-gray-700 hover:bg-gray-800/50"
+      className="block rounded-lg border border-mac-border bg-mac-white p-3 transition-colors hover:border-mac-border hover:bg-mac-highlight-soft/50"
     >
       <div className="flex items-center gap-2">
         <span
-          className={`h-2.5 w-2.5 shrink-0 rounded-full ${healthDotColors[agent.health] || "bg-gray-600"}`}
+          className={`h-2.5 w-2.5 shrink-0 rounded-full ${healthDotColors[agent.health] || "bg-mac-gray"}`}
         />
-        <span className="truncate text-sm font-medium text-gray-100">
+        <span className="truncate text-sm font-medium text-mac-black">
           {agent.name}
         </span>
       </div>
@@ -35,7 +35,7 @@ export function AgentCard({ agent }: AgentCardProps) {
         {agent.agent_type && (
           <Badge variant="stage" value={agent.agent_type} />
         )}
-        <span className="text-xs text-gray-500">
+        <span className="text-xs text-mac-dark-gray">
           {relativeTime(agent.last_seen_at)}
         </span>
       </div>

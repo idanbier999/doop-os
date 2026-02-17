@@ -9,7 +9,7 @@ interface TaskViewToggleProps {
 
 export function TaskViewToggle({ view, onViewChange }: TaskViewToggleProps) {
   return (
-    <div className="inline-flex rounded-md border border-gray-700">
+    <div className="inline-flex rounded-md border border-mac-border">
       <Button
         variant={view === "board" ? "primary" : "ghost"}
         size="sm"

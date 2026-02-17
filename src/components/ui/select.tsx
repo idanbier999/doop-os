@@ -29,8 +29,8 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
         <select
           ref={ref}
           id={selectId}
-          className={`block w-full rounded-[2px] border border-mac-black bg-mac-white px-2 py-1.5 text-sm text-mac-black shadow-[inset_1px_1px_0px_#555] focus:outline-none focus:ring-2 focus:ring-mac-black ${
-            error ? "border-[#CC0000]" : "border-mac-black"
+          className={`block w-full rounded-md border bg-mac-white px-2 py-1.5 text-sm text-mac-black mac-inset focus:outline-none focus:ring-2 focus:ring-mac-highlight/50 ${
+            error ? "border-severity-critical" : "border-mac-border"
           } ${className}`}
           {...props}
         >
@@ -46,7 +46,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
           ))}
         </select>
         {error && (
-          <p className="mt-1 text-sm text-[#CC0000] font-[family-name:var(--font-pixel)]">{error}</p>
+          <p className="mt-1 text-sm text-severity-critical font-[family-name:var(--font-pixel)]">{error}</p>
         )}
       </div>
     );

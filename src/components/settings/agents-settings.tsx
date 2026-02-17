@@ -83,7 +83,7 @@ export function AgentsSettings() {
     <>
       <Card>
         <CardHeader>
-          <h2 className="text-lg font-semibold text-gray-100">
+          <h2 className="text-lg font-semibold text-mac-black">
             Registered Agents
           </h2>
         </CardHeader>
@@ -93,7 +93,7 @@ export function AgentsSettings() {
               <LoadingSpinner />
             </div>
           ) : agents.length === 0 ? (
-            <p className="text-gray-500 text-sm">
+            <p className="text-mac-dark-gray text-sm">
               No agents registered yet. Agents connect via MCP.
             </p>
           ) : (
@@ -112,7 +112,7 @@ export function AgentsSettings() {
                 {agents.map((agent) => (
                   <Tr key={agent.id}>
                     <Td>
-                      <span className="text-gray-100 font-medium">
+                      <span className="text-mac-black font-medium">
                         {agent.name}
                       </span>
                     </Td>
@@ -147,7 +147,7 @@ export function AgentsSettings() {
                         </div>
                       ) : (
                         <div className="flex items-center gap-1">
-                          <span className="text-xs text-gray-400">
+                          <span className="text-xs text-mac-gray">
                             {agent.tags && agent.tags.length > 0
                               ? agent.tags.join(", ")
                               : "-"}
@@ -167,7 +167,7 @@ export function AgentsSettings() {
                     </Td>
                     <Td>
                       <div className="flex items-center gap-2">
-                        <code className="text-xs text-gray-400 font-mono">
+                        <code className="text-xs text-mac-gray font-mono">
                           {revealedKeys.has(agent.id)
                             ? agent.api_key
                             : maskKey(agent.api_key)}
@@ -204,9 +204,9 @@ export function AgentsSettings() {
         title="Delete Agent"
       >
         <div className="space-y-4">
-          <p className="text-gray-300">
+          <p className="text-mac-dark-gray">
             Are you sure you want to delete{" "}
-            <span className="font-semibold text-gray-100">
+            <span className="font-semibold text-mac-black">
               {deleteTarget?.name}
             </span>
             ? This action cannot be undone. All associated data will remain but

@@ -2,9 +2,9 @@ import { forwardRef, type ButtonHTMLAttributes } from "react";
 
 const variantStyles: Record<string, string> = {
   primary: "bg-mac-black text-mac-white hover:bg-mac-dark-gray",
-  secondary: "bg-mac-white text-mac-black hover:bg-mac-light-gray",
-  danger: "bg-mac-white text-[#CC0000] border-[#CC0000] hover:bg-[#CC0000] hover:text-mac-white",
-  ghost: "bg-transparent text-mac-black hover:bg-mac-light-gray border-transparent",
+  secondary: "bg-mac-white text-mac-black hover:bg-mac-highlight-soft",
+  danger: "bg-mac-white text-severity-critical border-severity-critical hover:bg-severity-critical hover:text-mac-white",
+  ghost: "bg-transparent text-mac-black hover:bg-mac-highlight-soft border-transparent",
 };
 
 const sizeStyles: Record<string, string> = {
@@ -24,7 +24,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       <button
         ref={ref}
         disabled={disabled}
-        className={`inline-flex items-center justify-center rounded-[6px] border border-mac-black font-bold font-[family-name:var(--font-pixel)] transition-colors focus:outline-none focus:ring-2 focus:ring-mac-black focus:ring-offset-1 focus:ring-offset-mac-cream disabled:text-mac-gray disabled:border-mac-gray disabled:bg-mac-light-gray disabled:pointer-events-none ${variantStyles[variant]} ${sizeStyles[size]} ${className}`}
+        className={`inline-flex items-center justify-center rounded-lg border border-mac-border-strong font-bold font-[family-name:var(--font-pixel)] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-mac-highlight/50 focus:ring-offset-1 focus:ring-offset-mac-cream disabled:text-mac-gray disabled:border-mac-gray disabled:bg-mac-light-gray disabled:pointer-events-none ${variantStyles[variant]} ${sizeStyles[size]} ${className}`}
         {...props}
       >
         {children}

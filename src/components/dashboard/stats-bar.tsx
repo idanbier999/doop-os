@@ -39,12 +39,12 @@ export function StatsBar({
       <StatCard
         label="In Progress"
         value={inProgress}
-        color="text-[#0055CC]"
+        color="text-severity-low"
       />
       <StatCard
         label="Open Problems"
         value={openProblems}
-        color="text-[#CC6600]"
+        color="text-severity-high"
       />
     </div>
   );

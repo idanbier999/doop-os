@@ -46,34 +46,34 @@ export function AgentTasksPanel({
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-gray-200">Tasks</h2>
-          <span className="text-xs text-gray-500">
+          <h2 className="text-sm font-semibold text-mac-black">Tasks</h2>
+          <span className="text-xs text-mac-dark-gray">
             {tasks.filter((t) => t.status !== "completed" && t.status !== "cancelled").length} active
           </span>
         </div>
       </CardHeader>
       <CardBody className="p-0">
         {tasks.length === 0 ? (
-          <p className="px-4 py-8 text-center text-sm text-gray-500">
+          <p className="px-4 py-8 text-center text-sm text-mac-dark-gray">
             No tasks assigned
           </p>
         ) : (
-          <ul className="divide-y divide-gray-800">
+          <ul className="divide-y divide-mac-border">
             {tasks.map((task) => (
               <li key={task.id} className="px-4 py-3">
                 <div className="flex items-center gap-2">
                   <Badge variant="status" value={task.status} />
                   <Badge variant="priority" value={task.priority} />
                 </div>
-                <p className="mt-1 text-sm font-medium text-gray-200">
+                <p className="mt-1 text-sm font-medium text-mac-black">
                   {task.title}
                 </p>
                 {task.description && (
-                  <p className="mt-0.5 text-xs text-gray-400 line-clamp-2">
+                  <p className="mt-0.5 text-xs text-mac-gray line-clamp-2">
                     {task.description}
                   </p>
                 )}
-                <p className="mt-1 text-xs text-gray-500">
+                <p className="mt-1 text-xs text-mac-dark-gray">
                   {relativeTime(task.created_at)}
                 </p>
               </li>

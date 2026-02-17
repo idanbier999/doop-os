@@ -16,17 +16,17 @@ interface StatusHeaderProps {
 
 export function StatusHeader({ agent }: StatusHeaderProps) {
   return (
-    <div className="rounded-lg border border-gray-800 bg-gray-900 p-5">
+    <div className="rounded-lg border border-mac-border bg-mac-white p-5">
       <div className="flex items-start justify-between">
         <div>
           <div className="flex items-center gap-3">
             <span
-              className={`h-3 w-3 shrink-0 rounded-full ${healthDotColors[agent.health] || "bg-gray-600"}`}
+              className={`h-3 w-3 shrink-0 rounded-full ${healthDotColors[agent.health] || "bg-mac-gray"}`}
             />
-            <h1 className="text-xl font-bold text-gray-100">{agent.name}</h1>
+            <h1 className="text-xl font-bold text-mac-black">{agent.name}</h1>
           </div>
           {agent.description && (
-            <p className="mt-2 text-sm text-gray-400">{agent.description}</p>
+            <p className="mt-2 text-sm text-mac-gray">{agent.description}</p>
           )}
           {agent.tags && agent.tags.length > 0 && (
             <div className="mt-2">
@@ -39,11 +39,11 @@ export function StatusHeader({ agent }: StatusHeaderProps) {
         <Badge variant="stage" value={agent.stage} />
         <Badge variant="health" value={agent.health} />
         {agent.agent_type && (
-          <span className="rounded-full bg-gray-800 px-2.5 py-0.5 text-xs font-medium text-gray-300">
+          <span className="rounded-full bg-mac-white px-2.5 py-0.5 text-xs font-medium text-mac-dark-gray">
             {agent.agent_type}
           </span>
         )}
-        <span className="text-xs text-gray-500">
+        <span className="text-xs text-mac-dark-gray">
           Last seen: {relativeTime(agent.last_seen_at)}
         </span>
       </div>

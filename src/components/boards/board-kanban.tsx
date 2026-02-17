@@ -92,7 +92,7 @@ export function BoardKanban({
       {grouped.map((col) => (
         <div key={col.key} className="flex-shrink-0 w-[280px]">
           {/* Column header */}
-          <div className="border-2 border-mac-black bg-mac-white shadow-[2px_2px_0px_#555] mb-3">
+          <div className="border-2 border-mac-border-strong bg-mac-white rounded-lg shadow-[2px_2px_0px_#555] mb-3">
             <div
               className="h-[3px]"
               style={{ backgroundColor: col.color }}
@@ -101,7 +101,7 @@ export function BoardKanban({
               <h3 className="text-sm font-bold text-mac-black font-[family-name:var(--font-pixel)]">
                 {col.label}
               </h3>
-              <span className="text-xs font-bold text-mac-dark-gray bg-mac-light-gray border border-mac-black rounded-full px-2 py-0.5 font-[family-name:var(--font-pixel)]">
+              <span className="text-xs font-bold text-mac-dark-gray bg-mac-light-gray border border-mac-border-strong rounded-full px-2 py-0.5 font-[family-name:var(--font-pixel)]">
                 {col.tasks.length}
               </span>
             </div>
@@ -110,7 +110,7 @@ export function BoardKanban({
           {/* Task cards */}
           <div className="space-y-2 min-h-[200px]">
             {col.tasks.length === 0 ? (
-              <div className="rounded-sm border-2 border-dashed border-mac-gray p-4 text-center text-xs text-mac-dark-gray font-[family-name:var(--font-pixel)]">
+              <div className="rounded-lg border-2 border-dashed border-mac-border p-4 text-center text-xs text-mac-dark-gray font-[family-name:var(--font-pixel)]">
                 No tasks
               </div>
             ) : (

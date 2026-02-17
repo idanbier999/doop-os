@@ -73,9 +73,9 @@ export function TaskList({ initialTasks }: TaskListProps) {
         {tasks.map((task) => (
           <Tr key={task.id}>
             <Td>
-              <span className="font-medium text-gray-100">{task.title}</span>
+              <span className="font-medium text-mac-black">{task.title}</span>
               {task.description && (
-                <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">
+                <p className="text-xs text-mac-dark-gray mt-0.5 line-clamp-1">
                   {task.description}
                 </p>
               )}

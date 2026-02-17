@@ -82,7 +82,7 @@ export function ActivityTimeline({
         onBoardChange={setSelectedBoard}
       />
 
-      <div className="rounded-lg border border-gray-800 bg-gray-900 divide-y divide-gray-800">
+      <div className="rounded-lg border border-mac-border bg-mac-white divide-y divide-mac-border">
         {filtered.length === 0 ? (
           <EmptyState
             message="No activity found"

@@ -131,7 +131,7 @@ export function BoardListView({
             </Td>
             <Td>
               {(problemCounts[task.id] || 0) > 0 ? (
-                <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-[#CC0000] text-mac-white text-xs font-bold font-[family-name:var(--font-pixel)]">
+                <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-severity-critical text-mac-white text-xs font-bold font-[family-name:var(--font-pixel)]">
                   {problemCounts[task.id]}
                 </span>
               ) : (

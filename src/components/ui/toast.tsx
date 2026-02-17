@@ -12,13 +12,13 @@ export interface ToastData {
 const typeStyles: Record<ToastData["type"], string> = {
   info: "border-mac-highlight",
   warning: "border-severity-high",
-  critical: "border-[#CC0000]",
+  critical: "border-severity-critical",
 };
 
 const titleBarBg: Record<ToastData["type"], string> = {
   info: "bg-mac-highlight text-mac-highlight-text",
   warning: "bg-severity-high text-white",
-  critical: "bg-[#CC0000] text-white",
+  critical: "bg-severity-critical text-white",
 };
 
 export function Toast({
@@ -46,7 +46,7 @@ export function Toast({
   return (
     <div
       className={`
-        mac-window w-72 transition-all duration-300 ease-out
+        mac-window glass-panel w-72 transition-all duration-300 ease-out
         ${typeStyles[toast.type]}
         ${visible ? "translate-x-0 opacity-100" : "translate-x-full opacity-0"}
       `}
@@ -54,7 +54,7 @@ export function Toast({
       {/* Title bar */}
       <div
         className={`
-          flex items-center gap-2 px-2 py-1 border-b-2 border-mac-black
+          flex items-center gap-2 px-2 py-1 border-b-2 border-mac-border
           font-[family-name:var(--font-pixel)] text-xs
           ${titleBarBg[toast.type]}
         `}

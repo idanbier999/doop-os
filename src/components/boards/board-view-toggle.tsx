@@ -7,12 +7,12 @@ interface BoardViewToggleProps {
 
 export function BoardViewToggle({ view, onChange }: BoardViewToggleProps) {
   return (
-    <div className="inline-flex border border-mac-black rounded-[6px] overflow-hidden">
+    <div className="inline-flex border border-mac-border-strong rounded-lg overflow-hidden">
       <button
         onClick={() => onChange("board")}
-        className={`px-3 py-1.5 text-sm font-bold font-[family-name:var(--font-pixel)] transition-colors ${
+        className={`px-3 py-1.5 text-sm font-bold font-[family-name:var(--font-pixel)] transition-colors rounded-lg ${
           view === "board"
-            ? "bg-mac-black text-mac-white"
+            ? "bg-mac-highlight text-mac-highlight-text"
             : "bg-mac-white text-mac-black hover:bg-mac-light-gray"
         }`}
         aria-label="Kanban view"
@@ -34,9 +34,9 @@ export function BoardViewToggle({ view, onChange }: BoardViewToggleProps) {
       </button>
       <button
         onClick={() => onChange("list")}
-        className={`px-3 py-1.5 text-sm font-bold font-[family-name:var(--font-pixel)] border-l border-mac-black transition-colors ${
+        className={`px-3 py-1.5 text-sm font-bold font-[family-name:var(--font-pixel)] border-l border-mac-border-strong transition-colors rounded-lg ${
           view === "list"
-            ? "bg-mac-black text-mac-white"
+            ? "bg-mac-highlight text-mac-highlight-text"
             : "bg-mac-white text-mac-black hover:bg-mac-light-gray"
         }`}
         aria-label="List view"

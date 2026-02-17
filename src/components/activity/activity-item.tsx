@@ -51,7 +51,7 @@ function formatAction(action: string): string {
 export function ActivityItem({ entry }: ActivityItemProps) {
   const icon = actionIcons[entry.action] || {
     path: "M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
-    color: "text-gray-400",
+    color: "text-mac-gray",
   };
 
   return (
@@ -73,23 +73,23 @@ export function ActivityItem({ entry }: ActivityItemProps) {
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-gray-200">
+          <span className="text-sm font-medium text-mac-black">
             {formatAction(entry.action)}
           </span>
           {entry.agents?.name && (
-            <span className="text-xs text-gray-500">
+            <span className="text-xs text-mac-dark-gray">
               by {entry.agents.name}
             </span>
           )}
         </div>
         {entry.details && typeof entry.details === "object" && (
-          <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">
+          <p className="text-xs text-mac-dark-gray mt-0.5 line-clamp-2">
             {(entry.details as Record<string, unknown>).message
               ? String((entry.details as Record<string, unknown>).message)
               : JSON.stringify(entry.details)}
           </p>
         )}
-        <span className="text-xs text-gray-600 mt-1 block">
+        <span className="text-xs text-mac-gray mt-1 block">
           {formatTimestamp(entry.created_at)}
         </span>
       </div>

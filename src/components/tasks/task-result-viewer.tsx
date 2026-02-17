@@ -11,16 +11,16 @@ function JsonNode({ data, depth = 0 }: { data: Json; depth?: number }) {
   }
 
   if (typeof data === "string") {
-    return <span className="text-[#007700]">&quot;{data}&quot;</span>;
+    return <span className="text-health-healthy">&quot;{data}&quot;</span>;
   }
 
   if (typeof data === "number") {
-    return <span className="text-[#CC6600]">{data}</span>;
+    return <span className="text-severity-high">{data}</span>;
   }
 
   if (typeof data === "boolean") {
     return (
-      <span className="text-[#CC0000]">{data ? "true" : "false"}</span>
+      <span className="text-severity-critical">{data ? "true" : "false"}</span>
     );
   }
 
@@ -70,7 +70,7 @@ function JsonNode({ data, depth = 0 }: { data: Json; depth?: number }) {
             <div className="ml-4">
               {entries.map(([key, value], i) => (
                 <div key={key}>
-                  <span className="text-[#0055CC]">&quot;{key}&quot;</span>
+                  <span className="text-mac-highlight">&quot;{key}&quot;</span>
                   <span className="text-mac-dark-gray">: </span>
                   <JsonNode data={value as Json} depth={depth + 1} />
                   {i < entries.length - 1 && (

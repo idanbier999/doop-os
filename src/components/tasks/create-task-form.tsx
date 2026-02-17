@@ -102,7 +102,7 @@ export function CreateTaskForm({ open, onClose, agents, boardId }: CreateTaskFor
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Add more details..."
             rows={3}
-            className="w-full rounded-[2px] border border-mac-black bg-mac-white px-3 py-2 text-mac-black placeholder-mac-gray shadow-[inset_1px_1px_0px_#555] focus:outline-none focus:ring-2 focus:ring-mac-black"
+            className="w-full rounded-md border border-mac-border bg-mac-white px-3 py-2 text-mac-black placeholder-mac-gray shadow-[inset_0px_1px_2px_rgba(74,78,105,0.08)] focus:outline-none focus:ring-2 focus:ring-mac-highlight/50"
           />
         </div>
         <Select
@@ -119,7 +119,7 @@ export function CreateTaskForm({ open, onClose, agents, boardId }: CreateTaskFor
           value={agentId}
           onChange={(e) => setAgentId(e.target.value)}
         />
-        {error && <p className="text-sm text-[#CC0000] font-[family-name:var(--font-pixel)]">{error}</p>}
+        {error && <p className="text-sm text-severity-critical font-[family-name:var(--font-pixel)]">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="secondary" type="button" onClick={onClose}>
             Cancel

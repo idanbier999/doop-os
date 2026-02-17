@@ -110,7 +110,7 @@ export function TaskProblems({ taskId }: TaskProblemsProps) {
         {problems.map((problem) => (
           <li
             key={problem.id}
-            className="border border-mac-black bg-mac-white p-3"
+            className="border border-mac-border rounded-md bg-mac-white p-3"
           >
             <div className="flex items-center gap-2 mb-1">
               <Badge variant="severity" value={problem.severity} />

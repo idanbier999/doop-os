@@ -83,7 +83,7 @@ export function CreateBoardModal({ open, onClose }: CreateBoardModalProps) {
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={3}
-            className="w-full rounded-[2px] border border-mac-black bg-mac-white px-2 py-1.5 text-sm text-mac-black placeholder-mac-gray shadow-[inset_1px_1px_0px_#555] focus:outline-none focus:ring-2 focus:ring-mac-black"
+            className="w-full rounded-md border border-mac-border bg-mac-white px-2 py-1.5 text-sm text-mac-black placeholder-mac-gray shadow-[inset_1px_1px_0px_rgba(0,0,0,0.06)] focus:outline-none focus:ring-2 focus:ring-mac-highlight"
           />
         </div>
 
@@ -110,7 +110,7 @@ export function CreateBoardModal({ open, onClose }: CreateBoardModalProps) {
         </div>
 
         {error && (
-          <p className="text-sm text-[#CC0000] font-[family-name:var(--font-pixel)]">
+          <p className="text-sm text-severity-critical font-[family-name:var(--font-pixel)]">
             {error}
           </p>
         )}

@@ -70,10 +70,10 @@ export function ActivityFeed({ initialActivity, agents }: ActivityFeedProps) {
             No activity yet
           </p>
         ) : (
-          <ul className="divide-y divide-mac-black">
+          <ul className="divide-y divide-mac-border">
             {activity.map((entry) => (
               <li key={entry.id} className="flex items-start gap-3 px-4 py-3">
-                <div className="mt-1 h-2 w-2 shrink-0 rounded-full bg-mac-dark-gray" />
+                <div className="mt-1 h-2 w-2 shrink-0 rounded-full bg-mac-highlight" />
                 <div className="min-w-0 flex-1">
                   <p className="text-sm text-mac-dark-gray font-[family-name:var(--font-pixel)]">
                     <span className="font-medium text-mac-black">

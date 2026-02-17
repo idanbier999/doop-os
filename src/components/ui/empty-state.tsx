@@ -23,7 +23,7 @@ export function EmptyState({ message, description, icon, actionLabel, onAction }
       {actionLabel && onAction && (
         <button
           onClick={onAction}
-          className="mt-4 inline-flex items-center rounded-[6px] border border-mac-black bg-mac-black px-4 py-1.5 text-sm font-bold text-mac-white hover:bg-mac-dark-gray transition-colors font-[family-name:var(--font-pixel)]"
+          className="mt-4 inline-flex items-center rounded-lg border border-mac-border-strong bg-mac-black px-4 py-1.5 text-sm font-bold text-mac-white hover:bg-mac-dark-gray transition-all duration-200 font-[family-name:var(--font-pixel)]"
         >
           {actionLabel}
         </button>

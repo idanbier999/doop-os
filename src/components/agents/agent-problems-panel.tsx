@@ -75,19 +75,19 @@ export function AgentProblemsPanel({
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-gray-200">Problems</h2>
-          <span className="text-xs text-gray-500">
+          <h2 className="text-sm font-semibold text-mac-black">Problems</h2>
+          <span className="text-xs text-mac-dark-gray">
             {problems.filter((p) => p.status === "open").length} open
           </span>
         </div>
       </CardHeader>
       <CardBody className="p-0">
         {problems.length === 0 ? (
-          <p className="px-4 py-8 text-center text-sm text-gray-500">
+          <p className="px-4 py-8 text-center text-sm text-mac-dark-gray">
             No problems reported
           </p>
         ) : (
-          <ul className="divide-y divide-gray-800">
+          <ul className="divide-y divide-mac-border">
             {problems.map((problem) => (
               <li key={problem.id} className="px-4 py-3">
                 <div className="flex items-start justify-between gap-2">
@@ -96,15 +96,15 @@ export function AgentProblemsPanel({
                       <Badge variant="severity" value={problem.severity} />
                       <Badge variant="status" value={problem.status} />
                     </div>
-                    <p className="mt-1 text-sm font-medium text-gray-200">
+                    <p className="mt-1 text-sm font-medium text-mac-black">
                       {problem.title}
                     </p>
                     {problem.description && (
-                      <p className="mt-0.5 text-xs text-gray-400 line-clamp-2">
+                      <p className="mt-0.5 text-xs text-mac-gray line-clamp-2">
                         {problem.description}
                       </p>
                     )}
-                    <p className="mt-1 text-xs text-gray-500">
+                    <p className="mt-1 text-xs text-mac-dark-gray">
                       {relativeTime(problem.created_at)}
                     </p>
                   </div>

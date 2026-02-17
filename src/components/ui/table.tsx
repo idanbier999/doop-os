@@ -6,7 +6,7 @@ export interface TableProps extends HTMLAttributes<HTMLTableElement> {
 
 export function Table({ children, className = "", ...props }: TableProps) {
   return (
-    <div className="overflow-x-auto border border-mac-black">
+    <div className="overflow-x-auto border border-mac-border rounded-lg">
       <table className={`w-full text-sm text-left ${className}`} {...props}>
         {children}
       </table>
@@ -20,7 +20,7 @@ export interface TheadProps extends HTMLAttributes<HTMLTableSectionElement> {
 
 export function Thead({ children, className = "", ...props }: TheadProps) {
   return (
-    <thead className={`border-b-2 border-mac-black bg-mac-light-gray text-xs uppercase text-mac-black font-bold ${className}`} {...props}>
+    <thead className={`border-b-2 border-mac-border bg-mac-light-gray text-xs uppercase text-mac-black font-bold ${className}`} {...props}>
       {children}
     </thead>
   );
@@ -34,7 +34,7 @@ export interface TbodyProps extends HTMLAttributes<HTMLTableSectionElement> {
 export function Tbody({ children, striped = false, className = "", ...props }: TbodyProps) {
   return (
     <tbody
-      className={`divide-y divide-mac-black ${striped ? "[&>tr:nth-child(even)]:bg-mac-cream" : ""} ${className}`}
+      className={`divide-y divide-mac-border ${striped ? "[&>tr:nth-child(even)]:bg-mac-cream" : ""} ${className}`}
       {...props}
     >
       {children}
@@ -48,7 +48,7 @@ export interface TrProps extends HTMLAttributes<HTMLTableRowElement> {
 
 export function Tr({ children, className = "", ...props }: TrProps) {
   return (
-    <tr className={`hover:bg-mac-light-gray transition-colors ${className}`} {...props}>
+    <tr className={`hover:bg-mac-highlight-soft transition-colors ${className}`} {...props}>
       {children}
     </tr>
   );
@@ -60,7 +60,7 @@ export interface ThProps extends ThHTMLAttributes<HTMLTableCellElement> {
 
 export function Th({ children, className = "", ...props }: ThProps) {
   return (
-    <th className={`px-4 py-2 font-bold border-r border-mac-black last:border-r-0 font-[family-name:var(--font-pixel)] ${className}`} {...props}>
+    <th className={`px-4 py-2 font-bold border-r border-mac-border last:border-r-0 font-[family-name:var(--font-pixel)] ${className}`} {...props}>
       {children}
     </th>
   );
@@ -72,7 +72,7 @@ export interface TdProps extends TdHTMLAttributes<HTMLTableCellElement> {
 
 export function Td({ children, className = "", ...props }: TdProps) {
   return (
-    <td className={`px-4 py-2 text-mac-black border-r border-mac-black last:border-r-0 ${className}`} {...props}>
+    <td className={`px-4 py-2 text-mac-black border-r border-mac-border last:border-r-0 ${className}`} {...props}>
       {children}
     </td>
   );

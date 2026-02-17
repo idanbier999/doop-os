@@ -25,7 +25,7 @@ export function BoardHeader({
 
       <div
         className="h-[6px] w-full rounded-t-sm mb-3"
-        style={{ backgroundColor: board.color || "#000000" }}
+        style={{ backgroundColor: board.color || "#666666" }}
       />
 
       <h1 className="text-2xl font-bold text-mac-black font-[family-name:var(--font-pixel)]">

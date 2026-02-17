@@ -53,13 +53,13 @@ export function Sidebar({ userEmail, workspaceName }: SidebarProps) {
 
       <aside
         className={`
-          flex flex-col w-56 h-screen bg-mac-light-gray border-r-2 border-mac-black shrink-0
+          flex flex-col w-56 h-screen glass-panel bg-mac-light-gray/80 border-r border-mac-border shrink-0
           fixed z-50 top-0 left-0 transition-transform duration-200 md:static md:translate-x-0
           ${isOpen ? "translate-x-0" : "-translate-x-full"}
         `}
       >
         {/* Apple-inspired header */}
-        <div className="px-4 py-3 border-b-2 border-mac-black">
+        <div className="px-4 py-3 border-b border-mac-border">
           <div className="flex items-center gap-2">
             {/* Rainbow Apple-inspired gradient bar */}
             <div className="w-3 h-5 rounded-sm" style={{
@@ -76,10 +76,10 @@ export function Sidebar({ userEmail, workspaceName }: SidebarProps) {
             <Link
               key={item.href}
               href={item.href}
-              className={`flex items-center gap-2 px-3 py-1.5 text-sm font-[family-name:var(--font-pixel)] ${
+              className={`flex items-center gap-2 px-3 py-1.5 text-sm font-[family-name:var(--font-pixel)] transition-colors duration-150 ${
                 isActive(item.href)
                   ? "bg-mac-highlight text-mac-highlight-text"
-                  : "text-mac-black hover:bg-mac-white"
+                  : "text-mac-black hover:bg-mac-highlight-soft"
               }`}
             >
               <span className="text-base leading-none">{item.icon}</span>
@@ -89,11 +89,11 @@ export function Sidebar({ userEmail, workspaceName }: SidebarProps) {
         </nav>
 
         {/* Footer */}
-        <div className="px-2 py-3 border-t-2 border-mac-black space-y-1">
+        <div className="px-2 py-3 border-t border-mac-border space-y-1">
           <p className="px-3 text-[11px] text-mac-dark-gray truncate font-[family-name:var(--font-pixel)]">{userEmail}</p>
           <button
             onClick={handleLogout}
-            className="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-mac-black hover:bg-mac-white font-[family-name:var(--font-pixel)]"
+            className="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-mac-black hover:bg-mac-highlight-soft transition-colors duration-150 font-[family-name:var(--font-pixel)]"
           >
             <span className="text-base leading-none">⊳</span>
             Sign out

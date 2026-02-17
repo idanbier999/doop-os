@@ -91,7 +91,7 @@ export function TaskComments({ taskId }: TaskCommentsProps) {
             <div
               key={comment.id}
               className={`border-l-2 pl-3 py-1 ${
-                isAgent ? "border-l-mac-black" : "border-l-mac-highlight"
+                isAgent ? "border-l-mac-dark-gray" : "border-l-mac-highlight"
               }`}
             >
               <div className="flex items-center gap-1 text-xs text-mac-dark-gray">
@@ -110,7 +110,7 @@ export function TaskComments({ taskId }: TaskCommentsProps) {
           );
         })}
       </div>
-      <div className="shrink-0 border-t border-mac-black p-3">
+      <div className="shrink-0 border-t border-mac-border p-3">
         <CommentForm taskId={taskId} />
       </div>
     </div>

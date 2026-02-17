@@ -38,15 +38,15 @@ export function Timeline({ agentId, initialUpdates }: TimelineProps) {
   return (
     <Card>
       <CardHeader>
-        <h2 className="text-sm font-semibold text-gray-200">Timeline</h2>
+        <h2 className="text-sm font-semibold text-mac-black">Timeline</h2>
       </CardHeader>
       <CardBody className="p-0">
         {updates.length === 0 ? (
-          <p className="px-4 py-8 text-center text-sm text-gray-500">
+          <p className="px-4 py-8 text-center text-sm text-mac-dark-gray">
             No updates yet
           </p>
         ) : (
-          <ul className="divide-y divide-gray-800">
+          <ul className="divide-y divide-mac-border">
             {updates.map((update) => (
               <li key={update.id} className="px-4 py-3">
                 <div className="flex items-center gap-2">
@@ -56,12 +56,12 @@ export function Timeline({ agentId, initialUpdates }: TimelineProps) {
                   {update.health && (
                     <Badge variant="health" value={update.health} />
                   )}
-                  <span className="ml-auto text-xs text-gray-500">
+                  <span className="ml-auto text-xs text-mac-dark-gray">
                     {relativeTime(update.created_at)}
                   </span>
                 </div>
                 {update.message && (
-                  <p className="mt-1 text-sm text-gray-300">
+                  <p className="mt-1 text-sm text-mac-dark-gray">
                     {update.message}
                   </p>
                 )}

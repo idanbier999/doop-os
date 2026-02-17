@@ -293,13 +293,13 @@ export function SearchCommand({ externalOpen, onExternalOpenHandled }: SearchCom
   return (
     <dialog
       ref={dialogRef}
-      className="backdrop:bg-black/40 bg-transparent p-0 m-auto mt-[15vh] max-sm:mt-0 max-sm:w-full max-sm:h-full max-sm:max-w-none max-sm:max-h-none"
+      className="backdrop:bg-black/40 glass-overlay bg-transparent p-0 m-auto mt-[15vh] max-sm:mt-0 max-sm:w-full max-sm:h-full max-sm:max-w-none max-sm:max-h-none"
       onClick={(e) => {
         if (e.target === dialogRef.current) closeSearch();
       }}
     >
-      <div className="border-[3px] border-mac-black bg-mac-white shadow-[3px_3px_0px_#555] w-[480px] max-sm:w-full max-sm:h-full max-sm:shadow-none">
-        <div className="border border-mac-black m-[2px]">
+      <div className="border border-mac-border rounded-lg bg-mac-white shadow-lg w-[480px] max-sm:w-full max-sm:h-full max-sm:shadow-none max-sm:rounded-none overflow-hidden">
+        <div className="">
           {/* Title bar */}
           <div className="mac-title-bar">
             <button
@@ -311,7 +311,7 @@ export function SearchCommand({ externalOpen, onExternalOpenHandled }: SearchCom
           </div>
 
           {/* Search input */}
-          <div className="p-3 border-b border-mac-black">
+          <div className="p-3 border-b border-mac-border">
             <input
               ref={inputRef}
               type="text"
@@ -319,7 +319,7 @@ export function SearchCommand({ externalOpen, onExternalOpenHandled }: SearchCom
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Search agents, boards, tasks, problems..."
-              className="w-full rounded-[2px] border border-mac-black bg-mac-white px-2 py-1.5 text-sm text-mac-black placeholder-mac-gray shadow-[inset_1px_1px_0px_#555] focus:outline-none focus:ring-2 focus:ring-mac-black font-[family-name:var(--font-pixel)]"
+              className="w-full rounded-md border border-mac-border bg-mac-white px-2 py-1.5 text-sm text-mac-black placeholder-mac-gray focus:outline-none focus:ring-2 focus:ring-mac-highlight font-[family-name:var(--font-pixel)]"
             />
           </div>
 
@@ -347,7 +347,7 @@ export function SearchCommand({ externalOpen, onExternalOpenHandled }: SearchCom
               groupedResults.map((group) => (
                 <div key={group.type}>
                   {/* Category header */}
-                  <div className="px-3 py-1.5 text-[11px] font-bold text-mac-dark-gray bg-mac-light-gray border-b border-mac-black font-[family-name:var(--font-pixel)]">
+                  <div className="px-3 py-1.5 text-[11px] font-bold text-mac-dark-gray bg-mac-light-gray border-b border-mac-border font-[family-name:var(--font-pixel)]">
                     {TYPE_CONFIG[group.type].icon}{" "}
                     {TYPE_CONFIG[group.type].label}
                   </div>
@@ -361,10 +361,10 @@ export function SearchCommand({ externalOpen, onExternalOpenHandled }: SearchCom
                         key={result.id}
                         onClick={() => navigateTo(result)}
                         onMouseEnter={() => setSelectedIndex(idx)}
-                        className={`w-full text-left px-3 py-1.5 flex items-center gap-2 text-sm border-b border-mac-light-gray font-[family-name:var(--font-pixel)] ${
+                        className={`w-full text-left px-3 py-1.5 flex items-center gap-2 text-sm border-b border-mac-light-gray font-[family-name:var(--font-pixel)] transition-colors duration-150 ${
                           isSelected
                             ? "bg-mac-highlight text-mac-highlight-text"
-                            : "text-mac-black hover:bg-mac-cream"
+                            : "text-mac-black hover:bg-mac-highlight-soft"
                         }`}
                       >
                         <span className="text-base leading-none shrink-0">
@@ -390,21 +390,21 @@ export function SearchCommand({ externalOpen, onExternalOpenHandled }: SearchCom
           </div>
 
           {/* Footer hints */}
-          <div className="px-3 py-2 border-t border-mac-black bg-mac-light-gray flex items-center gap-3 text-[11px] text-mac-dark-gray font-[family-name:var(--font-pixel)]">
+          <div className="px-3 py-2 border-t border-mac-border bg-mac-light-gray flex items-center gap-3 text-[11px] text-mac-dark-gray font-[family-name:var(--font-pixel)]">
             <span>
-              <kbd className="px-1 border border-mac-dark-gray bg-mac-white">
+              <kbd className="px-1 border border-mac-border bg-mac-white text-mac-dark-gray rounded">
                 &uarr;&darr;
               </kbd>{" "}
               navigate
             </span>
             <span>
-              <kbd className="px-1 border border-mac-dark-gray bg-mac-white">
+              <kbd className="px-1 border border-mac-border bg-mac-white text-mac-dark-gray rounded">
                 &crarr;
               </kbd>{" "}
               open
             </span>
             <span>
-              <kbd className="px-1 border border-mac-dark-gray bg-mac-white">
+              <kbd className="px-1 border border-mac-border bg-mac-white text-mac-dark-gray rounded">
                 esc
               </kbd>{" "}
               close

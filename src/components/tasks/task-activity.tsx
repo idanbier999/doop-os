@@ -91,7 +91,7 @@ export function TaskActivity({ taskId, workspaceId }: TaskActivityProps) {
         {entries.map((entry) => (
           <li
             key={entry.id}
-            className="border-l-2 border-mac-black pl-3 py-1"
+            className="border-l-2 border-mac-border pl-3 py-1"
           >
             <p className="text-sm text-mac-black">
               {formatActionDetail(entry)}

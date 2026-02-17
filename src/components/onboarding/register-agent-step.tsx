@@ -35,17 +35,17 @@ export function RegisterAgentStep({ onComplete }: RegisterAgentStepProps) {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold text-gray-100">
+        <h2 className="text-xl font-semibold text-mac-black">
           Connect your first agent
         </h2>
-        <p className="mt-1 text-sm text-gray-400">
+        <p className="mt-1 text-sm text-mac-gray">
           Add this MCP configuration to your agent&apos;s client (Claude
           Desktop, Cursor, etc.) to connect it to Mangistew.
         </p>
       </div>
 
       <div className="relative">
-        <pre className="rounded-lg border border-gray-800 bg-gray-900 p-4 text-sm text-gray-300 font-mono overflow-x-auto">
+        <pre className="rounded-lg border border-mac-border bg-mac-white p-4 text-sm text-mac-dark-gray font-mono overflow-x-auto">
           {mcpConfig}
         </pre>
         <Button
@@ -58,10 +58,10 @@ export function RegisterAgentStep({ onComplete }: RegisterAgentStepProps) {
         </Button>
       </div>
 
-      <p className="text-sm text-gray-500">
-        Replace <code className="text-gray-400">your_agent_api_key</code> with
+      <p className="text-sm text-mac-dark-gray">
+        Replace <code className="text-mac-gray">your_agent_api_key</code> with
         the API key you receive after registering an agent via the MCP{" "}
-        <code className="text-gray-400">register_agent</code> tool.
+        <code className="text-mac-gray">register_agent</code> tool.
       </p>
 
       <div className="flex gap-2">

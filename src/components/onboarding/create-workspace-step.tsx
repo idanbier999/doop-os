@@ -59,10 +59,10 @@ export function CreateWorkspaceStep({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold text-gray-100">
+        <h2 className="text-xl font-semibold text-mac-black">
           Create your workspace
         </h2>
-        <p className="mt-1 text-sm text-gray-400">
+        <p className="mt-1 text-sm text-mac-gray">
           A workspace is where your team and agents collaborate.
         </p>
       </div>

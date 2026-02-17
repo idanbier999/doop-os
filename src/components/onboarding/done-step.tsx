@@ -24,10 +24,10 @@ export function DoneStep() {
         </svg>
       </div>
       <div>
-        <h2 className="text-xl font-semibold text-gray-100">
+        <h2 className="text-xl font-semibold text-mac-black">
           You are all set!
         </h2>
-        <p className="mt-2 text-sm text-gray-400">
+        <p className="mt-2 text-sm text-mac-gray">
           Your workspace is ready. Head to the dashboard to start monitoring
           your agents.
         </p>

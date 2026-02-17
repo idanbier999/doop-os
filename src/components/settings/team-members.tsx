@@ -60,7 +60,7 @@ export function TeamMembers() {
   return (
     <Card>
       <CardHeader>
-        <h2 className="text-lg font-semibold text-gray-100">Team Members</h2>
+        <h2 className="text-lg font-semibold text-mac-black">Team Members</h2>
       </CardHeader>
       <CardBody>
         {loading ? (
@@ -68,7 +68,7 @@ export function TeamMembers() {
             <LoadingSpinner />
           </div>
         ) : members.length === 0 ? (
-          <p className="text-gray-500 text-sm">No members found.</p>
+          <p className="text-mac-dark-gray text-sm">No members found.</p>
         ) : (
           <Table>
             <Thead>
@@ -82,7 +82,7 @@ export function TeamMembers() {
               {members.map((member) => (
                 <Tr key={member.id}>
                   <Td>
-                    <span className="text-gray-100">{member.email}</span>
+                    <span className="text-mac-black">{member.email}</span>
                   </Td>
                   <Td>
                     <Badge

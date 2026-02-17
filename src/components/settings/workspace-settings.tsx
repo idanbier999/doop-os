@@ -45,7 +45,7 @@ export function WorkspaceSettings({ workspace }: WorkspaceSettingsProps) {
   return (
     <Card>
       <CardHeader>
-        <h2 className="text-lg font-semibold text-gray-100">
+        <h2 className="text-lg font-semibold text-mac-black">
           Workspace Settings
         </h2>
       </CardHeader>
@@ -66,12 +66,12 @@ export function WorkspaceSettings({ workspace }: WorkspaceSettingsProps) {
             disabled={!canEdit}
           />
           {!canEdit && (
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-mac-dark-gray">
               Only owners and admins can edit workspace settings.
             </p>
           )}
           {message && (
-            <p className="text-sm text-gray-400">{message}</p>
+            <p className="text-sm text-mac-gray">{message}</p>
           )}
           {canEdit && (
             <Button type="submit" disabled={saving}>

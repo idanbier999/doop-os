@@ -8,7 +8,7 @@ function JsonNode({ data, depth = 0 }: { data: Json; depth?: number }) {
   const [collapsed, setCollapsed] = useState(depth > 1);
 
   if (data === null || data === undefined) {
-    return <span className="text-gray-500">null</span>;
+    return <span className="text-mac-dark-gray">null</span>;
   }
 
   if (typeof data === "string") {
@@ -26,12 +26,12 @@ function JsonNode({ data, depth = 0 }: { data: Json; depth?: number }) {
   }
 
   if (Array.isArray(data)) {
-    if (data.length === 0) return <span className="text-gray-400">[]</span>;
+    if (data.length === 0) return <span className="text-mac-gray">[]</span>;
     return (
       <span>
         <button
           onClick={() => setCollapsed(!collapsed)}
-          className="text-gray-400 hover:text-gray-200"
+          className="text-mac-gray hover:text-mac-black"
         >
           {collapsed ? "[...]" : "["}
         </button>
@@ -42,12 +42,12 @@ function JsonNode({ data, depth = 0 }: { data: Json; depth?: number }) {
                 <div key={i}>
                   <JsonNode data={item} depth={depth + 1} />
                   {i < data.length - 1 && (
-                    <span className="text-gray-600">,</span>
+                    <span className="text-mac-gray">,</span>
                   )}
                 </div>
               ))}
             </div>
-            <span className="text-gray-400">]</span>
+            <span className="text-mac-gray">]</span>
           </>
         )}
       </span>
@@ -57,12 +57,12 @@ function JsonNode({ data, depth = 0 }: { data: Json; depth?: number }) {
   if (typeof data === "object") {
     const entries = Object.entries(data);
     if (entries.length === 0)
-      return <span className="text-gray-400">{"{}"}</span>;
+      return <span className="text-mac-gray">{"{}"}</span>;
     return (
       <span>
         <button
           onClick={() => setCollapsed(!collapsed)}
-          className="text-gray-400 hover:text-gray-200"
+          className="text-mac-gray hover:text-mac-black"
         >
           {collapsed ? "{...}" : "{"}
         </button>
@@ -72,22 +72,22 @@ function JsonNode({ data, depth = 0 }: { data: Json; depth?: number }) {
               {entries.map(([key, value], i) => (
                 <div key={key}>
                   <span className="text-severity-low">&quot;{key}&quot;</span>
-                  <span className="text-gray-500">: </span>
+                  <span className="text-mac-dark-gray">: </span>
                   <JsonNode data={value as Json} depth={depth + 1} />
                   {i < entries.length - 1 && (
-                    <span className="text-gray-600">,</span>
+                    <span className="text-mac-gray">,</span>
                   )}
                 </div>
               ))}
             </div>
-            <span className="text-gray-400">{"}"}</span>
+            <span className="text-mac-gray">{"}"}</span>
           </>
         )}
       </span>
     );
   }
 
-  return <span className="text-gray-400">{String(data)}</span>;
+  return <span className="text-mac-gray">{String(data)}</span>;
 }
 
 interface MetadataViewerProps {
@@ -98,11 +98,11 @@ export function MetadataViewer({ metadata }: MetadataViewerProps) {
   return (
     <Card>
       <CardHeader>
-        <h2 className="text-sm font-semibold text-gray-200">Metadata</h2>
+        <h2 className="text-sm font-semibold text-mac-black">Metadata</h2>
       </CardHeader>
       <CardBody>
         {metadata === null || metadata === undefined ? (
-          <p className="text-sm text-gray-500">No metadata</p>
+          <p className="text-sm text-mac-dark-gray">No metadata</p>
         ) : (
           <pre className="overflow-x-auto text-xs font-mono leading-relaxed">
             <JsonNode data={metadata} />

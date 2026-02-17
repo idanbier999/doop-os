@@ -1,84 +1,90 @@
 @import "tailwindcss";
 
 @theme inline {
-  --color-background: #F2EFEA;
-  --color-foreground: #000000;
+  --color-background: #EDEEF2;
+  --color-foreground: #1A1A2E;
   --font-pixel: "VT323", "Geneva", "Chicago", monospace;
+  --font-body: "Space Grotesk", system-ui, sans-serif;
 
   /* Mac palette */
-  --color-mac-cream: #F2EFEA;
+  --color-mac-cream: #EDEEF2;
   --color-mac-white: #FFFFFF;
-  --color-mac-black: #000000;
-  --color-mac-gray: #A8A8A8;
-  --color-mac-light-gray: #D5D5D5;
-  --color-mac-dark-gray: #555555;
-  --color-mac-highlight: #000080;
+  --color-mac-black: #1A1A2E;
+  --color-mac-gray: #9CA3B0;
+  --color-mac-light-gray: #DFE2E8;
+  --color-mac-dark-gray: #4A4E69;
+  --color-mac-highlight: #0066FF;
   --color-mac-highlight-text: #FFFFFF;
 
-  /* Health status colors - adapted for light background */
-  --color-health-healthy: #007700;
-  --color-health-degraded: #886600;
-  --color-health-critical: #CC0000;
-  --color-health-offline: #666666;
+  /* New tokens */
+  --color-mac-highlight-soft: #E8F0FF;
+  --color-mac-highlight-hover: #0052CC;
+  --color-mac-border: #C5C9D4;
+  --color-mac-border-strong: #1A1A2E;
+  --color-mac-shadow: #4A4E69;
+  --color-mac-shadow-soft: rgba(74, 78, 105, 0.12);
+
+  /* Health status colors */
+  --color-health-healthy: #00875A;
+  --color-health-degraded: #997A00;
+  --color-health-critical: #DE350B;
+  --color-health-offline: #6B778C;
 
   /* Severity colors */
-  --color-severity-low: #0055CC;
-  --color-severity-medium: #886600;
-  --color-severity-high: #CC6600;
-  --color-severity-critical: #CC0000;
+  --color-severity-low: #0065FF;
+  --color-severity-medium: #997A00;
+  --color-severity-high: #FF8B00;
+  --color-severity-critical: #DE350B;
 
   /* Agent stage colors */
-  --color-stage-idle: #666666;
-  --color-stage-running: #007700;
-  --color-stage-blocked: #CC6600;
-  --color-stage-completed: #0055CC;
-  --color-stage-error: #CC0000;
+  --color-stage-idle: #6B778C;
+  --color-stage-running: #00875A;
+  --color-stage-blocked: #FF8B00;
+  --color-stage-completed: #0065FF;
+  --color-stage-error: #DE350B;
 
   /* Priority colors */
-  --color-priority-low: #666666;
-  --color-priority-medium: #886600;
-  --color-priority-high: #CC6600;
-  --color-priority-urgent: #CC0000;
+  --color-priority-low: #6B778C;
+  --color-priority-medium: #997A00;
+  --color-priority-high: #FF8B00;
+  --color-priority-urgent: #DE350B;
 
   /* Task/problem status colors */
-  --color-status-pending: #666666;
-  --color-status-in-progress: #0055CC;
-  --color-status-waiting-on-agent: #7722AA;
-  --color-status-waiting-on-human: #AA7700;
-  --color-status-completed: #007700;
-  --color-status-cancelled: #666666;
+  --color-status-pending: #6B778C;
+  --color-status-in-progress: #0065FF;
+  --color-status-waiting-on-agent: #8250DF;
+  --color-status-waiting-on-human: #BF8700;
+  --color-status-completed: #00875A;
+  --color-status-cancelled: #6B778C;
 }
 
 body {
-  background: #F2EFEA;
-  color: #000000;
-  font-family: "Geneva", "Chicago", system-ui, sans-serif;
-  -webkit-font-smoothing: none;
-  -moz-osx-font-smoothing: unset;
+  background: radial-gradient(ellipse at 50% 0%, #F5F6FA 0%, #EDEEF2 60%);
+  color: #1A1A2E;
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* Mac Window */
 .mac-window {
-  border: 2px solid #000;
+  border: 1.5px solid #1A1A2E;
+  border-radius: 6px;
   background: #fff;
-  box-shadow: 2px 2px 0px #555;
+  box-shadow:
+    1px 1px 0px #4A4E69,
+    0px 4px 12px rgba(74, 78, 105, 0.12);
 }
 
-/* Striped Title Bar */
+/* Title Bar */
 .mac-title-bar {
-  background: repeating-linear-gradient(
-    to bottom,
-    #fff 0px, #fff 1px,
-    #000 1px, #000 2px,
-    #fff 2px, #fff 3px,
-    #000 3px, #000 4px,
-    #fff 4px, #fff 5px
-  );
-  height: 20px;
-  border-bottom: 2px solid #000;
+  background: linear-gradient(to bottom, #FFFFFF 0%, #F0F1F4 100%);
+  height: 28px;
+  border-bottom: 1px solid #C5C9D4;
+  border-radius: 6px 6px 0 0;
   display: flex;
   align-items: center;
-  padding: 0 4px;
+  padding: 0 8px;
   position: relative;
 }
 
@@ -86,33 +92,51 @@ body {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  background: #fff;
+  background: transparent;
   padding: 0 6px;
   font-size: 12px;
   font-weight: bold;
   font-family: "VT323", "Geneva", "Chicago", monospace;
-  line-height: 20px;
+  line-height: 28px;
   white-space: nowrap;
+  color: #1A1A2E;
 }
 
 /* Close Box */
 .mac-close-box {
   width: 12px;
   height: 12px;
-  border: 1px solid #000;
+  border: 1px solid #1A1A2E;
+  border-radius: 3px;
   background: #fff;
   cursor: pointer;
   flex-shrink: 0;
   z-index: 1;
+  transition: all 0.15s ease;
 }
 
 .mac-close-box:hover {
-  background: #000;
+  background: #0066FF;
+  border-color: #0066FF;
+  transform: scale(1.1);
 }
 
 /* Inset Input Style */
 .mac-inset {
-  border: 1px solid #000;
-  box-shadow: inset 1px 1px 0px #555;
+  border: 1px solid #C5C9D4;
+  box-shadow: inset 0px 1px 2px rgba(74, 78, 105, 0.08);
   background: #fff;
+}
+
+/* Glass panels */
+.glass-panel {
+  backdrop-filter: blur(12px) saturate(1.2);
+  -webkit-backdrop-filter: blur(12px) saturate(1.2);
+  background: rgba(255, 255, 255, 0.75);
+}
+
+.glass-overlay {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  background: rgba(26, 26, 46, 0.3);
 }

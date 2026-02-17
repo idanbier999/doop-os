@@ -21,7 +21,7 @@ export function BoardCard({
 
   return (
     <Link href={`/dashboard/boards/${board.id}`} className="block group">
-      <div className="mac-window transition-shadow group-hover:shadow-[3px_3px_0px_#333]">
+      <div className="mac-window transition-all duration-200 group-hover:shadow-[3px_3px_0px_#333] group-hover:-translate-y-0.5">
         {/* Colored top bar */}
         <div className="h-1" style={{ backgroundColor: boardColor }} />
         <div className="p-4 bg-mac-white">

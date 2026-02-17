@@ -148,14 +148,14 @@ export function ProblemsTable({
           description="Adjust filters or wait for agents to report issues"
         />
       ) : (
-        <div className="rounded-lg border border-gray-800 bg-gray-900 overflow-hidden">
+        <div className="rounded-lg border border-mac-border bg-mac-white overflow-hidden">
           <Table>
             <Thead>
               <Tr>
                 <Th>
                   <button
                     onClick={() => toggleSort("severity")}
-                    className="flex items-center gap-1 hover:text-gray-200"
+                    className="flex items-center gap-1 hover:text-mac-black"
                   >
                     Severity
                     {sortField === "severity" && (
@@ -171,7 +171,7 @@ export function ProblemsTable({
                 <Th>
                   <button
                     onClick={() => toggleSort("created_at")}
-                    className="flex items-center gap-1 hover:text-gray-200"
+                    className="flex items-center gap-1 hover:text-mac-black"
                   >
                     Created
                     {sortField === "created_at" && (
@@ -191,11 +191,11 @@ export function ProblemsTable({
                     <Badge variant="severity" value={problem.severity} />
                   </Td>
                   <Td>
-                    <span className="font-medium text-gray-100">
+                    <span className="font-medium text-mac-black">
                       {problem.title}
                     </span>
                     {problem.description && (
-                      <p className="mt-0.5 text-xs text-gray-500 line-clamp-1">
+                      <p className="mt-0.5 text-xs text-mac-dark-gray line-clamp-1">
                         {problem.description}
                       </p>
                     )}

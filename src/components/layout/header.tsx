@@ -13,7 +13,7 @@ export function Header({ workspaceName }: HeaderProps) {
   const { toggle } = useMobileSidebar();
 
   return (
-    <header className="flex items-center justify-between h-8 px-4 border-b border-mac-black bg-mac-white shrink-0">
+    <header className="flex items-center justify-between h-10 px-4 border-b border-mac-border bg-mac-white/90 backdrop-blur-sm shrink-0">
       <div className="flex items-center gap-2">
         <button
           onClick={toggle}
@@ -29,10 +29,10 @@ export function Header({ workspaceName }: HeaderProps) {
 
       <button
         onClick={() => setSearchOpen(true)}
-        className="flex items-center gap-1.5 px-2 py-0.5 text-[11px] text-mac-dark-gray hover:text-mac-black font-[family-name:var(--font-pixel)] border border-mac-dark-gray rounded-[2px] bg-mac-light-gray hover:bg-mac-cream"
+        className="flex items-center gap-1.5 px-2 py-0.5 text-[11px] text-mac-dark-gray hover:text-mac-black font-[family-name:var(--font-pixel)] border border-mac-border rounded-md bg-mac-light-gray hover:bg-mac-cream transition-colors duration-150"
       >
         Search
-        <kbd className="hidden sm:inline px-1 border border-mac-dark-gray bg-mac-white text-[10px]">
+        <kbd className="hidden sm:inline px-1 border border-mac-border bg-mac-white text-[10px] text-mac-dark-gray rounded">
           &#8984;K
         </kbd>
       </button>
