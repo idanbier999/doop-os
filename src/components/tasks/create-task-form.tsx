@@ -17,6 +17,7 @@ interface CreateTaskFormProps {
   open: boolean;
   onClose: () => void;
   agents: Agent[];
+  boardId?: string;
 }
 
 const priorityOptions = [
@@ -26,7 +27,7 @@ const priorityOptions = [
   { value: "urgent", label: "Urgent" },
 ];
 
-export function CreateTaskForm({ open, onClose, agents }: CreateTaskFormProps) {
+export function CreateTaskForm({ open, onClose, agents, boardId }: CreateTaskFormProps) {
   const { workspaceId, userId } = useWorkspace();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -60,6 +61,7 @@ export function CreateTaskForm({ open, onClose, agents }: CreateTaskFormProps) {
       assigned_to: null,
       created_by: userId,
       status: "pending",
+      board_id: boardId || null,
     });
 
     setSubmitting(false);
@@ -90,7 +92,7 @@ export function CreateTaskForm({ open, onClose, agents }: CreateTaskFormProps) {
         <div>
           <label
             htmlFor="task-description"
-            className="block text-sm font-medium text-gray-300 mb-1"
+            className="block text-sm font-bold text-mac-black mb-1 font-[family-name:var(--font-pixel)]"
           >
             Description
           </label>
@@ -100,7 +102,7 @@ export function CreateTaskForm({ open, onClose, agents }: CreateTaskFormProps) {
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Add more details..."
             rows={3}
-            className="w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-gray-100 placeholder-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="w-full rounded-[2px] border border-mac-black bg-mac-white px-3 py-2 text-mac-black placeholder-mac-gray shadow-[inset_1px_1px_0px_#555] focus:outline-none focus:ring-2 focus:ring-mac-black"
           />
         </div>
         <Select
@@ -117,7 +119,7 @@ export function CreateTaskForm({ open, onClose, agents }: CreateTaskFormProps) {
           value={agentId}
           onChange={(e) => setAgentId(e.target.value)}
         />
-        {error && <p className="text-sm text-red-400">{error}</p>}
+        {error && <p className="text-sm text-[#CC0000] font-[family-name:var(--font-pixel)]">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="secondary" type="button" onClick={onClose}>
             Cancel

@@ -109,6 +109,7 @@ export type Database = {
           metadata: Json | null
           name: string
           stage: string
+          tags: string[] | null
           updated_at: string | null
           workspace_id: string
         }
@@ -123,6 +124,7 @@ export type Database = {
           metadata?: Json | null
           name: string
           stage?: string
+          tags?: string[] | null
           updated_at?: string | null
           workspace_id: string
         }
@@ -137,6 +139,7 @@ export type Database = {
           metadata?: Json | null
           name?: string
           stage?: string
+          tags?: string[] | null
           updated_at?: string | null
           workspace_id?: string
         }
@@ -145,6 +148,88 @@ export type Database = {
             foreignKeyName: "agents_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      boards: {
+        Row: {
+          color: string | null
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          id: string
+          name: string
+          position: number | null
+          updated_at: string | null
+          workspace_id: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          position?: number | null
+          updated_at?: string | null
+          workspace_id: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          position?: number | null
+          updated_at?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "boards_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notification_settings: {
+        Row: {
+          created_at: string | null
+          id: string
+          notify_on_problem_severity: string[] | null
+          slack_enabled: boolean | null
+          slack_webhook_url: string | null
+          updated_at: string | null
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          notify_on_problem_severity?: string[] | null
+          slack_enabled?: boolean | null
+          slack_webhook_url?: string | null
+          updated_at?: string | null
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          notify_on_problem_severity?: string[] | null
+          slack_enabled?: boolean | null
+          slack_webhook_url?: string | null
+          updated_at?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_settings_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: true
             referencedRelation: "workspaces"
             referencedColumns: ["id"]
           },
@@ -160,6 +245,7 @@ export type Database = {
           resolved_by: string | null
           severity: string
           status: string
+          task_id: string | null
           title: string
         }
         Insert: {
@@ -171,6 +257,7 @@ export type Database = {
           resolved_by?: string | null
           severity?: string
           status?: string
+          task_id?: string | null
           title: string
         }
         Update: {
@@ -182,6 +269,7 @@ export type Database = {
           resolved_by?: string | null
           severity?: string
           status?: string
+          task_id?: string | null
           title?: string
         }
         Relationships: [
@@ -192,12 +280,72 @@ export type Database = {
             referencedRelation: "agents"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "problems_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      task_comments: {
+        Row: {
+          agent_id: string | null
+          content: string
+          created_at: string | null
+          id: string
+          task_id: string
+          user_id: string | null
+          workspace_id: string
+        }
+        Insert: {
+          agent_id?: string | null
+          content: string
+          created_at?: string | null
+          id?: string
+          task_id: string
+          user_id?: string | null
+          workspace_id: string
+        }
+        Update: {
+          agent_id?: string | null
+          content?: string
+          created_at?: string | null
+          id?: string
+          task_id?: string
+          user_id?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_comments_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_comments_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_comments_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
         ]
       }
       tasks: {
         Row: {
           agent_id: string | null
           assigned_to: string | null
+          board_id: string | null
           created_at: string | null
           created_by: string | null
           description: string | null
@@ -212,6 +360,7 @@ export type Database = {
         Insert: {
           agent_id?: string | null
           assigned_to?: string | null
+          board_id?: string | null
           created_at?: string | null
           created_by?: string | null
           description?: string | null
@@ -226,6 +375,7 @@ export type Database = {
         Update: {
           agent_id?: string | null
           assigned_to?: string | null
+          board_id?: string | null
           created_at?: string | null
           created_by?: string | null
           description?: string | null
@@ -243,6 +393,13 @@ export type Database = {
             columns: ["agent_id"]
             isOneToOne: false
             referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_board_id_fkey"
+            columns: ["board_id"]
+            isOneToOne: false
+            referencedRelation: "boards"
             referencedColumns: ["id"]
           },
           {
@@ -318,16 +475,32 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      check_user_workspace_membership: {
+        Args: never
+        Returns: {
+          role: string
+          workspace_id: string
+        }[]
+      }
       create_workspace_for_user: {
         Args: { workspace_name: string; workspace_slug: string }
         Returns: string
       }
+      get_user_workspace_ids: { Args: { uid: string }; Returns: string[] }
       get_workspace_member_emails: {
         Args: { ws_id: string }
         Returns: {
           email: string
           user_id: string
         }[]
+      }
+      is_workspace_admin_or_owner: {
+        Args: { uid: string; ws_id: string }
+        Returns: boolean
+      }
+      is_workspace_owner: {
+        Args: { uid: string; ws_id: string }
+        Returns: boolean
       }
     }
     Enums: {

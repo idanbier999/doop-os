@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge";
+import { AgentTags } from "@/components/agents/agent-tags";
 import { relativeTime } from "@/lib/utils";
 import type { Tables } from "@/lib/database.types";
 
@@ -26,6 +27,11 @@ export function StatusHeader({ agent }: StatusHeaderProps) {
           </div>
           {agent.description && (
             <p className="mt-2 text-sm text-gray-400">{agent.description}</p>
+          )}
+          {agent.tags && agent.tags.length > 0 && (
+            <div className="mt-2">
+              <AgentTags tags={agent.tags} size="md" />
+            </div>
           )}
         </div>
       </div>

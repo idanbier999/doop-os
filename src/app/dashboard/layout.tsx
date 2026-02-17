@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { WorkspaceProvider } from "@/contexts/workspace-context";
+import { NotificationProvider } from "@/contexts/notification-context";
+import { MobileSidebarProvider } from "@/contexts/mobile-sidebar-context";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 
@@ -42,13 +44,17 @@ export default async function DashboardLayout({
       userId={user.id}
       userRole={membership.role as "owner" | "admin" | "member"}
     >
-      <div className="flex h-screen overflow-hidden bg-mac-cream">
-        <Sidebar userEmail={user.email || ""} workspaceName={workspace.name} />
-        <div className="flex flex-1 flex-col overflow-hidden">
-          <Header workspaceName={workspace.name} />
-          <main className="flex-1 overflow-y-auto p-6 bg-mac-cream">{children}</main>
-        </div>
-      </div>
+      <NotificationProvider>
+        <MobileSidebarProvider>
+          <div className="flex h-screen overflow-hidden bg-mac-cream">
+            <Sidebar userEmail={user.email || ""} workspaceName={workspace.name} />
+            <div className="flex flex-1 flex-col overflow-hidden">
+              <Header workspaceName={workspace.name} />
+              <main className="flex-1 overflow-y-auto p-3 sm:p-6 bg-mac-cream">{children}</main>
+            </div>
+          </div>
+        </MobileSidebarProvider>
+      </NotificationProvider>
     </WorkspaceProvider>
   );
 }

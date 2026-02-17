@@ -3,11 +3,22 @@
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { login } from "./actions";
+import { createClient } from "@/lib/supabase/client";
 
 function LoginForm() {
   const searchParams = useSearchParams();
   const error = searchParams.get("error");
   const message = searchParams.get("message");
+
+  const handleGoogleSignIn = async () => {
+    const supabase = createClient();
+    await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
+    });
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 bg-mac-cream">
@@ -75,6 +86,23 @@ function LoginForm() {
               Sign In
             </button>
           </form>
+
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-mac-gray" />
+            </div>
+            <div className="relative flex justify-center text-xs">
+              <span className="bg-mac-white px-2 text-mac-dark-gray font-[family-name:var(--font-pixel)]">or</span>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleGoogleSignIn}
+            className="w-full rounded-[6px] border border-mac-black bg-mac-white px-4 py-1.5 font-bold text-mac-black hover:bg-mac-light-gray transition-colors font-[family-name:var(--font-pixel)]"
+          >
+            Sign in with Google
+          </button>
 
           <p className="mt-6 text-center text-sm text-mac-dark-gray font-[family-name:var(--font-pixel)]">
             Don&apos;t have an account?{" "}

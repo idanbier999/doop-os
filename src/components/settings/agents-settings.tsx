@@ -20,6 +20,8 @@ export function AgentsSettings() {
   const [revealedKeys, setRevealedKeys] = useState<Set<string>>(new Set());
   const [deleteTarget, setDeleteTarget] = useState<Agent | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [editingTags, setEditingTags] = useState<string | null>(null);
+  const [tagInput, setTagInput] = useState("");
 
   const loadAgents = useCallback(async () => {
     const supabase = createClient();
@@ -52,6 +54,17 @@ export function AgentsSettings() {
   function maskKey(key: string | null) {
     if (!key) return "No key";
     return key.slice(0, 8) + "..." + key.slice(-4);
+  }
+
+  async function handleSaveTags(agentId: string) {
+    const tagsArray = tagInput.split(",").map(t => t.trim()).filter(Boolean);
+    const supabase = createClient();
+    const { error } = await supabase.from("agents").update({ tags: tagsArray }).eq("id", agentId);
+    if (!error) {
+      setAgents(prev => prev.map(a => a.id === agentId ? { ...a, tags: tagsArray } : a));
+    }
+    setEditingTags(null);
+    setTagInput("");
   }
 
   async function handleDelete() {
@@ -90,6 +103,7 @@ export function AgentsSettings() {
                   <Th>Name</Th>
                   <Th>Type</Th>
                   <Th>Health</Th>
+                  <Th>Tags</Th>
                   <Th>API Key</Th>
                   <Th>Actions</Th>
                 </Tr>
@@ -105,6 +119,51 @@ export function AgentsSettings() {
                     <Td>{agent.agent_type || "-"}</Td>
                     <Td>
                       <Badge variant="health" value={agent.health} />
+                    </Td>
+                    <Td>
+                      {editingTags === agent.id ? (
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="text"
+                            value={tagInput}
+                            onChange={(e) => setTagInput(e.target.value)}
+                            placeholder="tag1, tag2, ..."
+                            className="rounded-[2px] border border-mac-black bg-mac-white px-2 py-1 text-xs text-mac-black shadow-[inset_1px_1px_0px_#555] focus:outline-none focus:ring-2 focus:ring-mac-black font-[family-name:var(--font-pixel)] w-36"
+                          />
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            onClick={() => handleSaveTags(agent.id)}
+                          >
+                            Save
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => { setEditingTags(null); setTagInput(""); }}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1">
+                          <span className="text-xs text-gray-400">
+                            {agent.tags && agent.tags.length > 0
+                              ? agent.tags.join(", ")
+                              : "-"}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setEditingTags(agent.id);
+                              setTagInput(agent.tags?.join(", ") || "");
+                            }}
+                          >
+                            Edit
+                          </Button>
+                        </div>
+                      )}
                     </Td>
                     <Td>
                       <div className="flex items-center gap-2">

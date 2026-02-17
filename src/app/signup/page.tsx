@@ -4,11 +4,22 @@ import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { signup } from "../login/actions";
+import { createClient } from "@/lib/supabase/client";
 
 function SignupForm() {
   const searchParams = useSearchParams();
   const error = searchParams.get("error");
   const [clientError, setClientError] = useState<string | null>(null);
+
+  const handleGoogleSignUp = async () => {
+    const supabase = createClient();
+    await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
+    });
+  };
 
   function handleSubmit(formData: FormData) {
     const password = formData.get("password") as string;
@@ -102,6 +113,23 @@ function SignupForm() {
               Sign Up
             </button>
           </form>
+
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-mac-gray" />
+            </div>
+            <div className="relative flex justify-center text-xs">
+              <span className="bg-mac-white px-2 text-mac-dark-gray font-[family-name:var(--font-pixel)]">or</span>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleGoogleSignUp}
+            className="w-full rounded-[6px] border border-mac-black bg-mac-white px-4 py-1.5 font-bold text-mac-black hover:bg-mac-light-gray transition-colors font-[family-name:var(--font-pixel)]"
+          >
+            Sign up with Google
+          </button>
 
           <p className="mt-6 text-center text-sm text-mac-dark-gray font-[family-name:var(--font-pixel)]">
             Already have an account?{" "}

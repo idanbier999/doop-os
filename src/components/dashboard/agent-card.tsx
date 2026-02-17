@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
+import { AgentTags } from "@/components/agents/agent-tags";
 import { relativeTime } from "@/lib/utils";
 import type { Tables } from "@/lib/database.types";
 
@@ -38,6 +39,11 @@ export function AgentCard({ agent }: AgentCardProps) {
           {relativeTime(agent.last_seen_at)}
         </span>
       </div>
+      {agent.tags && agent.tags.length > 0 && (
+        <div className="mt-1.5">
+          <AgentTags tags={agent.tags} size="sm" maxVisible={3} />
+        </div>
+      )}
     </Link>
   );
 }

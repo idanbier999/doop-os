@@ -25,6 +25,11 @@ const actionLabels: Record<string, string> = {
   problem_reported: "Problem reported",
   task_created: "Task created",
   task_completed: "Task completed",
+  task_updated: "Task updated",
+  task_comment: "Commented on task",
+  problem_acknowledged: "Problem acknowledged",
+  problem_resolved: "Problem resolved",
+  problem_dismissed: "Problem dismissed",
 };
 
 interface ActivityFeedProps {
@@ -57,26 +62,26 @@ export function ActivityFeed({ initialActivity, agents }: ActivityFeedProps) {
   return (
     <Card>
       <CardHeader>
-        <h2 className="text-sm font-semibold text-gray-200">Recent Activity</h2>
+        <h2 className="text-sm font-semibold text-mac-black font-[family-name:var(--font-pixel)]">Recent Activity</h2>
       </CardHeader>
       <CardBody className="p-0">
         {activity.length === 0 ? (
-          <p className="px-4 py-8 text-center text-sm text-gray-500">
+          <p className="px-4 py-8 text-center text-sm text-mac-gray font-[family-name:var(--font-pixel)]">
             No activity yet
           </p>
         ) : (
-          <ul className="divide-y divide-gray-800">
+          <ul className="divide-y divide-mac-black">
             {activity.map((entry) => (
               <li key={entry.id} className="flex items-start gap-3 px-4 py-3">
-                <div className="mt-1 h-2 w-2 shrink-0 rounded-full bg-gray-600" />
+                <div className="mt-1 h-2 w-2 shrink-0 rounded-full bg-mac-dark-gray" />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm text-gray-300">
-                    <span className="font-medium text-gray-100">
+                  <p className="text-sm text-mac-dark-gray font-[family-name:var(--font-pixel)]">
+                    <span className="font-medium text-mac-black">
                       {entry.agents?.name || "System"}
                     </span>{" "}
                     {actionLabels[entry.action] || entry.action}
                   </p>
-                  <p className="mt-0.5 text-xs text-gray-500">
+                  <p className="mt-0.5 text-xs text-mac-gray font-[family-name:var(--font-pixel)]">
                     {relativeTime(entry.created_at)}
                   </p>
                 </div>

@@ -37,6 +37,9 @@ export function ProblemsTable({
   const [severityFilter, setSeverityFilter] = useState("all");
   const [agentFilter, setAgentFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [taskFilter, setTaskFilter] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
   type SortField = "created_at" | "severity";
   type SortDir = "asc" | "desc";
@@ -95,6 +98,14 @@ export function ProblemsTable({
       if (severityFilter !== "all" && p.severity !== severityFilter) return false;
       if (agentFilter !== "all" && p.agent_id !== agentFilter) return false;
       if (statusFilter !== "all" && p.status !== statusFilter) return false;
+      if (dateFrom && p.created_at) {
+        if (new Date(p.created_at) < new Date(dateFrom)) return false;
+      }
+      if (dateTo && p.created_at) {
+        const to = new Date(dateTo);
+        to.setDate(to.getDate() + 1);
+        if (new Date(p.created_at) >= to) return false;
+      }
       return true;
     });
 
@@ -111,7 +122,7 @@ export function ProblemsTable({
     });
 
     return result;
-  }, [problems, severityFilter, agentFilter, statusFilter, sortField, sortDir]);
+  }, [problems, severityFilter, agentFilter, statusFilter, taskFilter, dateFrom, dateTo, sortField, sortDir]);
 
   return (
     <div className="space-y-4">
@@ -120,9 +131,15 @@ export function ProblemsTable({
         severity={severityFilter}
         agentId={agentFilter}
         status={statusFilter}
+        taskFilter={taskFilter}
+        dateFrom={dateFrom}
+        dateTo={dateTo}
         onSeverityChange={setSeverityFilter}
         onAgentChange={setAgentFilter}
         onStatusChange={setStatusFilter}
+        onTaskFilterChange={setTaskFilter}
+        onDateFromChange={setDateFrom}
+        onDateToChange={setDateTo}
       />
 
       {filtered.length === 0 ? (
