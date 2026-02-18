@@ -6,6 +6,7 @@ import { useWorkspace } from "@/contexts/workspace-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardBody } from "@/components/ui/card";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { testSlackWebhook } from "@/app/dashboard/settings/actions";
 
 const SEVERITIES = ["low", "medium", "high", "critical"] as const;
 
@@ -25,6 +26,7 @@ export function NotificationSettings() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
 
   const [slackEnabled, setSlackEnabled] = useState(false);
@@ -75,6 +77,23 @@ export function NotificationSettings() {
       }
       return next;
     });
+  }
+
+  async function handleTest() {
+    if (!canEdit) return;
+
+    setTesting(true);
+    setMessage(null);
+
+    const result = await testSlackWebhook(workspaceId);
+
+    if (result.success) {
+      setMessage({ text: "Test notification sent! Check your Slack channel.", type: "success" });
+    } else {
+      setMessage({ text: result.error ?? "Test failed", type: "error" });
+    }
+
+    setTesting(false);
   }
 
   async function handleSave() {
@@ -209,6 +228,13 @@ export function NotificationSettings() {
         <div className="flex items-center gap-3">
           <Button onClick={handleSave} disabled={saving}>
             {saving ? "Saving..." : "Save Changes"}
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={handleTest}
+            disabled={!slackEnabled || !webhookUrl.trim() || testing || saving}
+          >
+            {testing ? "Testing..." : "Test Webhook"}
           </Button>
           {message && (
             <span
