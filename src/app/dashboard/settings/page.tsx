@@ -1,5 +1,8 @@
+import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { SettingsPageClient } from "@/components/settings/settings-page-client";
+
+export const metadata: Metadata = { title: "Settings | Mangistew" };
 
 export default async function SettingsPage() {
   const supabase = await createClient();

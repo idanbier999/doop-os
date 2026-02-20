@@ -1,7 +1,11 @@
 "use client";
 
-import { Select } from "@/components/ui/select";
-import { DateRange } from "@/components/ui/date-range";
+import { Select } from "@/components/ui/select"
+import { DateRange } from "@/components/ui/date-range"
+import { Button } from "@/components/ui/button"
+import { CATEGORY_ACTIONS } from "@/lib/activity-categories"
+
+export { CATEGORY_ACTIONS }
 
 interface Agent {
   id: string;
@@ -17,8 +21,8 @@ interface ActivityFiltersProps {
   agents: Agent[];
   selectedAgent: string;
   onAgentChange: (agentId: string) => void;
-  selectedAction: string;
-  onActionChange: (action: string) => void;
+  selectedCategory: string;
+  onCategoryChange: (category: string) => void;
   dateFrom: string;
   onDateFromChange: (date: string) => void;
   dateTo: string;
@@ -26,25 +30,25 @@ interface ActivityFiltersProps {
   boards: Board[];
   selectedBoard: string;
   onBoardChange: (boardId: string) => void;
+  onExportCSV: () => void;
+  onExportJSON: () => void;
+  filteredCount: number;
 }
 
-const actionOptions = [
-  { value: "", label: "All actions" },
-  { value: "agent_registered", label: "Agent Registered" },
-  { value: "status_update", label: "Status Update" },
-  { value: "problem_reported", label: "Problem Reported" },
-  { value: "task_created", label: "Task Created" },
-  { value: "task_completed", label: "Task Completed" },
-  { value: "task_updated", label: "Task Updated" },
-  { value: "task_comment", label: "Task Comment" },
-];
+const categoryOptions = [
+  { value: "", label: "All Events" },
+  { value: "agent_lifecycle", label: "Agent Lifecycle" },
+  { value: "task_events", label: "Task Events" },
+  { value: "problems", label: "Problems" },
+  { value: "audit_trail", label: "Audit Trail" },
+]
 
 export function ActivityFilters({
   agents,
   selectedAgent,
   onAgentChange,
-  selectedAction,
-  onActionChange,
+  selectedCategory,
+  onCategoryChange,
   dateFrom,
   onDateFromChange,
   dateTo,
@@ -52,16 +56,19 @@ export function ActivityFilters({
   boards,
   selectedBoard,
   onBoardChange,
+  onExportCSV,
+  onExportJSON,
+  filteredCount,
 }: ActivityFiltersProps) {
   const agentOptions = [
     { value: "", label: "All agents" },
     ...agents.map((a) => ({ value: a.id, label: a.name })),
-  ];
+  ]
 
   const boardOptions = [
     { value: "", label: "All boards" },
     ...boards.map((b) => ({ value: b.id, label: b.name })),
-  ];
+  ]
 
   return (
     <div className="flex flex-wrap items-end gap-3">
@@ -74,9 +81,9 @@ export function ActivityFilters({
       </div>
       <div className="w-full sm:w-48">
         <Select
-          options={actionOptions}
-          value={selectedAction}
-          onChange={(e) => onActionChange(e.target.value)}
+          options={categoryOptions}
+          value={selectedCategory}
+          onChange={(e) => onCategoryChange(e.target.value)}
         />
       </div>
       <div className="w-full sm:w-48">
@@ -92,6 +99,24 @@ export function ActivityFilters({
         onFromChange={onDateFromChange}
         onToChange={onDateToChange}
       />
+      <div className="flex gap-2 ml-auto">
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={onExportCSV}
+          disabled={filteredCount === 0}
+        >
+          Export CSV
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={onExportJSON}
+          disabled={filteredCount === 0}
+        >
+          Export JSON
+        </Button>
+      </div>
     </div>
-  );
+  )
 }

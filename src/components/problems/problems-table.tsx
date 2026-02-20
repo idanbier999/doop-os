@@ -144,8 +144,8 @@ export function ProblemsTable({
 
       {filtered.length === 0 ? (
         <EmptyState
-          message="No problems found"
-          description="Adjust filters or wait for agents to report issues"
+          message="No problems reported"
+          description="Your agents are running smoothly"
         />
       ) : (
         <div className="rounded-lg border border-mac-border bg-mac-white overflow-hidden">

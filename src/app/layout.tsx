@@ -15,8 +15,8 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "Mangistew",
-  description: "The control plane for your AI workforce",
+  title: "Mangistew — Control Plane for Autonomous AI",
+  description: "Audit, govern, and operate your AI agents at scale.",
 };
 
 export default function RootLayout({

@@ -7,11 +7,11 @@ import { createClient } from "@/lib/supabase/client";
 import { useMobileSidebar } from "@/contexts/mobile-sidebar-context";
 
 const navItems = [
-  { label: "Overview", href: "/dashboard", icon: "◻" },
-  { label: "Boards", href: "/dashboard/boards", icon: "▦" },
+  { label: "Fleet", href: "/dashboard", icon: "▣" },
   { label: "Agents", href: "/dashboard/agents", icon: "◆" },
+  { label: "Audit Trail", href: "/dashboard/activity", icon: "◷" },
   { label: "Problems", href: "/dashboard/problems", icon: "⚠" },
-  { label: "Activity", href: "/dashboard/activity", icon: "◷" },
+  { label: "Boards", href: "/dashboard/boards", icon: "▦" },
   { label: "Settings", href: "/dashboard/settings", icon: "⚙" },
 ];
 

@@ -3,6 +3,8 @@ import { AgentTags } from "@/components/agents/agent-tags";
 import { relativeTime } from "@/lib/utils";
 import type { Tables } from "@/lib/database.types";
 
+type Agent = Omit<Tables<"agents">, "api_key">;
+
 const healthDotColors: Record<string, string> = {
   healthy: "bg-health-healthy",
   degraded: "bg-health-degraded",
@@ -11,7 +13,7 @@ const healthDotColors: Record<string, string> = {
 };
 
 interface StatusHeaderProps {
-  agent: Tables<"agents">;
+  agent: Agent;
 }
 
 export function StatusHeader({ agent }: StatusHeaderProps) {

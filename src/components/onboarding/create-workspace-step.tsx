@@ -60,10 +60,10 @@ export function CreateWorkspaceStep({
     <div className="space-y-6">
       <div>
         <h2 className="text-xl font-semibold text-mac-black">
-          Create your workspace
+          Set up your control plane
         </h2>
         <p className="mt-1 text-sm text-mac-gray">
-          A workspace is where your team and agents collaborate.
+          Your control plane is where you audit, govern, and operate your AI agents.
         </p>
       </div>
 
@@ -86,7 +86,7 @@ export function CreateWorkspaceStep({
         />
         {error && <p className="text-sm text-red-400">{error}</p>}
         <Button type="submit" disabled={submitting}>
-          {submitting ? "Creating..." : "Create Workspace"}
+          {submitting ? "Creating..." : "Create Control Plane"}
         </Button>
       </form>
     </div>

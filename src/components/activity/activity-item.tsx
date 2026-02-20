@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { Tables } from "@/lib/database.types";
 
 type ActivityEntry = Tables<"activity_log"> & {
@@ -48,14 +49,43 @@ function formatAction(action: string): string {
   return action.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
 }
 
+function hasDetails(details: unknown): details is Record<string, unknown> {
+  return (
+    details !== null &&
+    typeof details === "object" &&
+    !Array.isArray(details) &&
+    Object.keys(details as object).length > 0
+  );
+}
+
 export function ActivityItem({ entry }: ActivityItemProps) {
+  const [expanded, setExpanded] = useState(false);
+
   const icon = actionIcons[entry.action] || {
     path: "M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
     color: "text-mac-gray",
   };
 
+  const isExpandable = hasDetails(entry.details);
+
   return (
-    <div className="flex gap-3 py-3">
+    <div
+      className={`flex gap-3 py-3 ${isExpandable ? "cursor-pointer" : ""}`}
+      onClick={isExpandable ? () => setExpanded((prev) => !prev) : undefined}
+      onKeyDown={
+        isExpandable
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setExpanded((prev) => !prev);
+              }
+            }
+          : undefined
+      }
+      role={isExpandable ? "button" : undefined}
+      tabIndex={isExpandable ? 0 : undefined}
+      aria-expanded={isExpandable ? expanded : undefined}
+    >
       <div className={`flex-shrink-0 mt-0.5 ${icon.color}`}>
         <svg
           className="h-5 w-5"
@@ -81,6 +111,23 @@ export function ActivityItem({ entry }: ActivityItemProps) {
               by {entry.agents.name}
             </span>
           )}
+          {isExpandable && (
+            <svg
+              className={`ml-auto h-3.5 w-3.5 flex-shrink-0 text-mac-gray transition-transform duration-200 ${
+                expanded ? "rotate-180" : "rotate-0"
+              }`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2.5}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M19 9l-7 7-7-7"
+              />
+            </svg>
+          )}
         </div>
         {entry.details && typeof entry.details === "object" && (
           <p className="text-xs text-mac-dark-gray mt-0.5 line-clamp-2">
@@ -92,6 +139,11 @@ export function ActivityItem({ entry }: ActivityItemProps) {
         <span className="text-xs text-mac-gray mt-1 block">
           {formatTimestamp(entry.created_at)}
         </span>
+        {isExpandable && expanded && (
+          <pre className="rounded-md p-3 mt-2 text-xs text-mac-dark-gray overflow-x-auto mac-inset">
+            {JSON.stringify(entry.details, null, 2)}
+          </pre>
+        )}
       </div>
     </div>
   );

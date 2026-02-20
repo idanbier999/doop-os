@@ -4,6 +4,7 @@ import { useState, useCallback } from "react";
 import { useRealtime } from "@/hooks/use-realtime";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardBody } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { relativeTime } from "@/lib/utils";
 import type { Tables } from "@/lib/database.types";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
@@ -42,9 +43,10 @@ export function Timeline({ agentId, initialUpdates }: TimelineProps) {
       </CardHeader>
       <CardBody className="p-0">
         {updates.length === 0 ? (
-          <p className="px-4 py-8 text-center text-sm text-mac-dark-gray">
-            No updates yet
-          </p>
+          <EmptyState
+            message="Waiting for first status update"
+            description="Waiting for first status update from this agent"
+          />
         ) : (
           <ul className="divide-y divide-mac-border">
             {updates.map((update) => (

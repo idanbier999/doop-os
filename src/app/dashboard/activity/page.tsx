@@ -1,5 +1,8 @@
+import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { ActivityTimeline } from "@/components/activity/activity-timeline";
+
+export const metadata: Metadata = { title: "Audit Trail | Mangistew" };
 
 export default async function ActivityPage() {
   const supabase = await createClient();
@@ -7,7 +10,7 @@ export default async function ActivityPage() {
   const [entriesResult, agentsResult, boardsResult] = await Promise.all([
     supabase
       .from("activity_log")
-      .select("*, agents(name)")
+      .select("id, action, details, created_at, agent_id, user_id, workspace_id, agents(name)")
       .order("created_at", { ascending: false })
       .limit(200),
     supabase.from("agents").select("id, name").order("name"),
@@ -16,7 +19,7 @@ export default async function ActivityPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-mac-black font-[family-name:var(--font-pixel)]">Activity Log</h1>
+      <h1 className="text-2xl font-bold text-mac-black font-[family-name:var(--font-pixel)]">Audit Trail</h1>
       <ActivityTimeline
         initialEntries={entriesResult.data || []}
         agents={agentsResult.data || []}

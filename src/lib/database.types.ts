@@ -108,6 +108,7 @@ export type Database = {
           last_seen_at: string | null
           metadata: Json | null
           name: string
+          platform: string | null
           stage: string
           tags: string[] | null
           updated_at: string | null
@@ -123,6 +124,7 @@ export type Database = {
           last_seen_at?: string | null
           metadata?: Json | null
           name: string
+          platform?: string | null
           stage?: string
           tags?: string[] | null
           updated_at?: string | null
@@ -138,6 +140,7 @@ export type Database = {
           last_seen_at?: string | null
           metadata?: Json | null
           name?: string
+          platform?: string | null
           stage?: string
           tags?: string[] | null
           updated_at?: string | null

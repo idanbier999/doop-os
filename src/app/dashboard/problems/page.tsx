@@ -1,6 +1,9 @@
+import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { ProblemsTable } from "@/components/problems/problems-table";
+
+export const metadata: Metadata = { title: "Problems | Mangistew" };
 
 export default async function ProblemsPage() {
   const supabase = await createClient();

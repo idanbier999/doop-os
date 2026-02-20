@@ -6,7 +6,7 @@ import { CreateWorkspaceStep } from "@/components/onboarding/create-workspace-st
 import { RegisterAgentStep } from "@/components/onboarding/register-agent-step";
 import { DoneStep } from "@/components/onboarding/done-step";
 
-const steps = ["Create Workspace", "Connect Agent", "Done"];
+const steps = ["Set Up Control Plane", "Connect Agent", "Done"];
 
 export function OnboardingWizard() {
   const [step, setStep] = useState(0);
