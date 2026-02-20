@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { createClient } from "@/lib/supabase/server";
+import { getAuthenticatedSupabase } from "@/lib/supabase/server-with-auth";
 import { redirect } from "next/navigation";
 
 export const metadata: Metadata = { title: "Fleet | Mangistew" };
@@ -25,11 +25,8 @@ function buildDateBuckets(days: number): { keys: string[]; map: Record<string, s
 }
 
 export default async function DashboardOverviewPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { user, supabase } = await getAuthenticatedSupabase();
+  if (!user || !supabase) redirect("/login");
 
   const { data: membership } = await supabase
     .from("workspace_members")

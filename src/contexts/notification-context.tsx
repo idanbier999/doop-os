@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useSupabase } from "@/hooks/use-supabase";
 import { useWorkspace } from "@/contexts/workspace-context";
 import { ToastContainer, type ToastData } from "@/components/ui/toast";
 
@@ -35,9 +35,10 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
+  const supabase = useSupabase();
+
   // Subscribe to Supabase Realtime for new problems
   useEffect(() => {
-    const supabase = createClient();
 
     const channel = supabase
       .channel("toast-problems")
@@ -81,7 +82,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [workspaceId, addToast]);
+  }, [supabase, workspaceId, addToast]);
 
   return (
     <NotificationContext.Provider value={{ addToast, dismissToast }}>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useSupabase } from "@/hooks/use-supabase";
 import { CreateWorkspaceStep } from "@/components/onboarding/create-workspace-step";
 import { RegisterAgentStep } from "@/components/onboarding/register-agent-step";
 import { DoneStep } from "@/components/onboarding/done-step";
@@ -10,7 +10,7 @@ const steps = ["Set Up Control Plane", "Connect Agent", "Done"];
 
 export function OnboardingWizard() {
   const [step, setStep] = useState(0);
-  const supabase = createClient();
+  const supabase = useSupabase();
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-mac-light-gray p-4">

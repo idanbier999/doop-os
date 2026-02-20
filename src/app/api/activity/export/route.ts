@@ -1,7 +1,6 @@
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import type { Database } from "@/lib/database.types";
+import { getAuthenticatedSupabase } from "@/lib/supabase/server-with-auth";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -132,40 +131,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   // -------------------------------------------------------------------------
-  // 2. Build Supabase server client (Route Handler pattern)
+  // 2. Authenticate via Better Auth
   // -------------------------------------------------------------------------
-  const cookieStore = await cookies();
+  const { user, supabase } = await getAuthenticatedSupabase();
 
-  const supabase = createServerClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll(cookiesToSet) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            );
-          } catch {
-            // Route Handlers may not always be able to set cookies; safe to ignore.
-          }
-        },
-      },
-    }
-  );
-
-  // -------------------------------------------------------------------------
-  // 3. Authenticate
-  // -------------------------------------------------------------------------
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
+  if (!user || !supabase) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 

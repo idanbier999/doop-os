@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useSupabase } from "@/hooks/use-supabase";
 import { useWorkspace } from "@/contexts/workspace-context";
 import { Button } from "@/components/ui/button";
 
@@ -10,6 +10,7 @@ interface CommentFormProps {
 }
 
 export function CommentForm({ taskId }: CommentFormProps) {
+  const supabase = useSupabase();
   const [content, setContent] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -22,8 +23,6 @@ export function CommentForm({ taskId }: CommentFormProps) {
 
     setSubmitting(true);
     try {
-      const supabase = createClient();
-
       await supabase.from("task_comments").insert({
         task_id: taskId,
         workspace_id: workspaceId,

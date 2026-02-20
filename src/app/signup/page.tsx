@@ -1,38 +1,47 @@
 "use client";
 
 import { useState } from "react";
-import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
-import { signup } from "../login/actions";
-import { createClient } from "@/lib/supabase/client";
+import { authClient } from "@/lib/auth-client";
 
 function SignupForm() {
-  const searchParams = useSearchParams();
-  const error = searchParams.get("error");
-  const [clientError, setClientError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   const handleGoogleSignUp = async () => {
-    const supabase = createClient();
-    await supabase.auth.signInWithOAuth({
+    await authClient.signIn.social({
       provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
+      callbackURL: "/dashboard",
     });
   };
 
-  function handleSubmit(formData: FormData) {
+  const handleSignup = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    const formData = new FormData(e.currentTarget);
     const password = formData.get("password") as string;
     const confirmPassword = formData.get("confirmPassword") as string;
 
     if (password !== confirmPassword) {
-      setClientError("Passwords do not match");
+      setError("Passwords do not match");
+      setLoading(false);
       return;
     }
 
-    setClientError(null);
-    signup(formData);
-  }
+    const email = formData.get("email") as string;
+    const { error } = await authClient.signUp.email({
+      email,
+      password,
+      name: email.split("@")[0],
+    });
+    if (error) {
+      setError(error.message ?? "Sign up failed");
+      setLoading(false);
+    } else {
+      window.location.href = "/dashboard";
+    }
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 bg-mac-cream">
@@ -46,13 +55,13 @@ function SignupForm() {
             Get started with Mangistew
           </p>
 
-          {(error || clientError) && (
+          {error && (
             <div className="mb-4 p-2 border border-[#CC0000] bg-mac-white text-[#CC0000] text-sm font-[family-name:var(--font-pixel)]">
-              {clientError || error}
+              {error}
             </div>
           )}
 
-          <form action={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSignup} className="space-y-4">
             <div>
               <label
                 htmlFor="email"
@@ -108,9 +117,10 @@ function SignupForm() {
 
             <button
               type="submit"
-              className="w-full rounded-[6px] border border-mac-black bg-mac-black px-4 py-1.5 font-bold text-mac-white hover:bg-mac-dark-gray transition-colors font-[family-name:var(--font-pixel)]"
+              disabled={loading}
+              className="w-full rounded-[6px] border border-mac-black bg-mac-black px-4 py-1.5 font-bold text-mac-white hover:bg-mac-dark-gray transition-colors font-[family-name:var(--font-pixel)] disabled:opacity-50"
             >
-              Sign Up
+              {loading ? "Creating account..." : "Sign Up"}
             </button>
           </form>
 

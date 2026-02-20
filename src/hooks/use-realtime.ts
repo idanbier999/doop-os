@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useSupabase } from "@/hooks/use-supabase";
 import type { RealtimeChannel, RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 
 type PostgresEvent = "INSERT" | "UPDATE" | "DELETE" | "*";
@@ -21,10 +21,10 @@ export function useRealtime({
   schema = "public",
   onPayload,
 }: UseRealtimeOptions) {
+  const supabase = useSupabase();
   const channelRef = useRef<RealtimeChannel | null>(null);
 
   useEffect(() => {
-    const supabase = createClient();
 
     const channelConfig: {
       event: PostgresEvent;
@@ -51,7 +51,7 @@ export function useRealtime({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [table, event, filter, schema, onPayload]);
+  }, [supabase, table, event, filter, schema, onPayload]);
 
   return channelRef.current;
 }

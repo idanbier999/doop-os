@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useSupabase } from "@/hooks/use-supabase";
 import { useWorkspace } from "@/contexts/workspace-context";
 import { Modal } from "@/components/ui/modal";
 import { Input } from "@/components/ui/input";
@@ -29,6 +29,7 @@ const priorityOptions = [
 
 export function CreateTaskForm({ open, onClose, agents, boardId }: CreateTaskFormProps) {
   const { workspaceId, userId } = useWorkspace();
+  const supabase = useSupabase();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState("medium");
@@ -51,7 +52,6 @@ export function CreateTaskForm({ open, onClose, agents, boardId }: CreateTaskFor
     setSubmitting(true);
     setError("");
 
-    const supabase = createClient();
     const { error: insertError } = await supabase.from("tasks").insert({
       workspace_id: workspaceId,
       title: title.trim(),

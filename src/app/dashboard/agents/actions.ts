@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { getAuthenticatedSupabase } from "@/lib/supabase/server-with-auth";
 
 export async function createAgent(
   workspaceId: string,
@@ -8,14 +8,8 @@ export async function createAgent(
   platform: string
 ) {
   try {
-    const supabase = await createClient();
-
-    // Authenticate
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-    if (authError || !user) {
+    const { user, supabase } = await getAuthenticatedSupabase();
+    if (!user || !supabase) {
       return { success: false, error: "Not authenticated" };
     }
 

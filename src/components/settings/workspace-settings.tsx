@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useSupabase } from "@/hooks/use-supabase";
 import { useWorkspace } from "@/contexts/workspace-context";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,7 @@ export function WorkspaceSettings({ workspace }: WorkspaceSettingsProps) {
   const [slug, setSlug] = useState(workspace.slug);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const supabase = useSupabase();
 
   const canEdit = userRole === "owner" || userRole === "admin";
 
@@ -27,7 +28,6 @@ export function WorkspaceSettings({ workspace }: WorkspaceSettingsProps) {
     setSaving(true);
     setMessage("");
 
-    const supabase = createClient();
     const { error } = await supabase
       .from("workspaces")
       .update({ name: name.trim(), slug: slug.trim() })

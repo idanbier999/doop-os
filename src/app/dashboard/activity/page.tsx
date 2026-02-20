@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
-import { createClient } from "@/lib/supabase/server";
+import { getAuthenticatedSupabase } from "@/lib/supabase/server-with-auth";
 import { ActivityTimeline } from "@/components/activity/activity-timeline";
 
 export const metadata: Metadata = { title: "Audit Trail | Mangistew" };
 
 export default async function ActivityPage() {
-  const supabase = await createClient();
+  const { supabase: sb } = await getAuthenticatedSupabase();
+  const supabase = sb!;
 
   const [entriesResult, agentsResult, boardsResult] = await Promise.all([
     supabase

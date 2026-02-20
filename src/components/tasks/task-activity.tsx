@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useSupabase } from "@/hooks/use-supabase";
 import { useRealtime } from "@/hooks/use-realtime";
 import { relativeTime } from "@/lib/utils";
 import type { Tables } from "@/lib/database.types";
@@ -35,6 +35,7 @@ function formatActionDetail(entry: ActivityEntry): string {
 }
 
 export function TaskActivity({ taskId, workspaceId }: TaskActivityProps) {
+  const supabase = useSupabase();
   const [entries, setEntries] = useState<ActivityEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -42,7 +43,6 @@ export function TaskActivity({ taskId, workspaceId }: TaskActivityProps) {
     let cancelled = false;
     async function fetchActivity() {
       setLoading(true);
-      const supabase = createClient();
       const { data } = await supabase
         .from("activity_log")
         .select("*, agents(name)")
@@ -58,7 +58,7 @@ export function TaskActivity({ taskId, workspaceId }: TaskActivityProps) {
     return () => {
       cancelled = true;
     };
-  }, [taskId, workspaceId]);
+  }, [taskId, workspaceId, supabase]);
 
   const handlePayload = useCallback(
     (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {

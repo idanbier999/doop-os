@@ -3,7 +3,7 @@
 import { useState, useCallback } from "react";
 import { useRealtime } from "@/hooks/use-realtime";
 import { useWorkspace } from "@/contexts/workspace-context";
-import { createClient } from "@/lib/supabase/client";
+import { useSupabase } from "@/hooks/use-supabase";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardBody } from "@/components/ui/card";
@@ -24,6 +24,7 @@ export function AgentProblemsPanel({
     useState<Tables<"problems">[]>(initialProblems);
   const [loading, setLoading] = useState<string | null>(null);
   const { userId, workspaceId } = useWorkspace();
+  const supabase = useSupabase();
 
   const handlePayload = useCallback(
     (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
@@ -53,7 +54,6 @@ export function AgentProblemsPanel({
     status: string
   ) => {
     setLoading(problemId);
-    const supabase = createClient();
     const updateData: Record<string, string> = { status };
     if (status === "resolved" || status === "dismissed") {
       updateData.resolved_by = userId;

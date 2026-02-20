@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useSupabase } from "@/hooks/use-supabase";
 import { useWorkspace } from "@/contexts/workspace-context";
 import { Card, CardHeader, CardBody } from "@/components/ui/card";
 import { Table, Thead, Tbody, Tr, Th, Td } from "@/components/ui/table";
@@ -18,13 +18,12 @@ interface MemberRow {
 
 export function TeamMembers() {
   const { workspaceId } = useWorkspace();
+  const supabase = useSupabase();
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function loadMembers() {
-      const supabase = createClient();
-
       // Fetch workspace members
       const { data: memberData } = await supabase
         .from("workspace_members")
@@ -55,7 +54,7 @@ export function TeamMembers() {
     }
 
     loadMembers();
-  }, [workspaceId]);
+  }, [workspaceId, supabase]);
 
   return (
     <Card>

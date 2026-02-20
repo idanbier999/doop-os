@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { getAuthenticatedSupabase } from "@/lib/supabase/server-with-auth";
 import { getAgentStats } from "@/lib/agent-stats";
 import { StatusHeader } from "@/components/agents/status-header";
 import { HealthSparkline } from "@/components/agents/health-sparkline";
@@ -16,8 +16,8 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const supabase = await createClient();
-  const { data: agent } = await supabase
+  const { supabase } = await getAuthenticatedSupabase();
+  const { data: agent } = await supabase!
     .from("agents")
     .select("name")
     .eq("id", id)
@@ -34,7 +34,8 @@ interface AgentDetailPageProps {
 
 export default async function AgentDetailPage({ params }: AgentDetailPageProps) {
   const { id } = await params;
-  const supabase = await createClient();
+  const { supabase: sb } = await getAuthenticatedSupabase();
+  const supabase = sb!;
 
   const { data: agent } = await supabase
     .from("agents")

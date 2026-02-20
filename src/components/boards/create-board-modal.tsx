@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useSupabase } from "@/hooks/use-supabase";
 import { useWorkspace } from "@/contexts/workspace-context";
 import { Modal } from "@/components/ui/modal";
 import { Input } from "@/components/ui/input";
@@ -25,6 +25,7 @@ interface CreateBoardModalProps {
 
 export function CreateBoardModal({ open, onClose }: CreateBoardModalProps) {
   const { workspaceId, userId } = useWorkspace();
+  const supabase = useSupabase();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [selectedColor, setSelectedColor] = useState(COLOR_PRESETS[0].value);
@@ -41,7 +42,6 @@ export function CreateBoardModal({ open, onClose }: CreateBoardModalProps) {
     setSubmitting(true);
     setError(null);
 
-    const supabase = createClient();
     const { error: insertError } = await supabase.from("boards").insert({
       workspace_id: workspaceId,
       name: name.trim(),

@@ -4,7 +4,7 @@ import { useCallback, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { useRealtime } from "@/hooks/use-realtime";
 import { useWorkspace } from "@/contexts/workspace-context";
-import { createClient } from "@/lib/supabase/client";
+import { useSupabase } from "@/hooks/use-supabase";
 import type { Tables } from "@/lib/database.types";
 
 interface FleetStatsBarProps {
@@ -25,12 +25,12 @@ export function FleetStatsBar({
   initialTasksInFlight,
 }: FleetStatsBarProps) {
   const { workspaceId } = useWorkspace();
+  const supabase = useSupabase();
   const [agentCounts, setAgentCounts] = useState(initialAgentCounts);
   const [openProblems, setOpenProblems] = useState(initialOpenProblems);
   const [tasksInFlight, setTasksInFlight] = useState(initialTasksInFlight);
 
   const refetchAgentCounts = useCallback(async () => {
-    const supabase = createClient();
     const { data } = await supabase
       .from("agents")
       .select("health")
@@ -46,10 +46,9 @@ export function FleetStatsBar({
       }
       setAgentCounts(counts);
     }
-  }, [workspaceId]);
+  }, [workspaceId, supabase]);
 
   const refetchProblems = useCallback(async () => {
-    const supabase = createClient();
     const { data } = await supabase
       .from("problems")
       .select("severity, agent_id, status")
@@ -70,10 +69,9 @@ export function FleetStatsBar({
         critical: data.filter((p) => p.severity === "critical").length,
       });
     }
-  }, [workspaceId]);
+  }, [workspaceId, supabase]);
 
   const refetchTasks = useCallback(async () => {
-    const supabase = createClient();
     const { count } = await supabase
       .from("tasks")
       .select("*", { count: "exact", head: true })
@@ -81,7 +79,7 @@ export function FleetStatsBar({
       .in("status", ["in_progress", "waiting_on_agent", "waiting_on_human"]);
 
     setTasksInFlight(count ?? 0);
-  }, [workspaceId]);
+  }, [workspaceId, supabase]);
 
   useRealtime({ table: "agents", onPayload: refetchAgentCounts });
   useRealtime({ table: "problems", onPayload: refetchProblems });

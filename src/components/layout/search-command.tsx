@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useSupabase } from "@/hooks/use-supabase";
 import { useWorkspace } from "@/contexts/workspace-context";
 import { useRouter } from "next/navigation";
 
@@ -42,6 +42,7 @@ export function SearchCommand({ externalOpen, onExternalOpenHandled }: SearchCom
 
   const { workspaceId } = useWorkspace();
   const router = useRouter();
+  const supabase = useSupabase();
 
   const openSearch = useCallback(() => {
     setOpen(true);
@@ -116,7 +117,6 @@ export function SearchCommand({ externalOpen, onExternalOpenHandled }: SearchCom
     setLoading(true);
 
     debounceRef.current = setTimeout(async () => {
-      const supabase = createClient();
       const pattern = `%${query.trim()}%`;
       const allResults: SearchResult[] = [];
 

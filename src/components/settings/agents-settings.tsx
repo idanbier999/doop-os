@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useSupabase } from "@/hooks/use-supabase";
 import { useWorkspace } from "@/contexts/workspace-context";
 import { Card, CardHeader, CardBody } from "@/components/ui/card";
 import { Table, Thead, Tbody, Tr, Th, Td } from "@/components/ui/table";
@@ -15,6 +15,7 @@ type Agent = Tables<"agents">;
 
 export function AgentsSettings() {
   const { workspaceId } = useWorkspace();
+  const supabase = useSupabase();
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
   const [revealedKeys, setRevealedKeys] = useState<Set<string>>(new Set());
@@ -24,7 +25,6 @@ export function AgentsSettings() {
   const [tagInput, setTagInput] = useState("");
 
   const loadAgents = useCallback(async () => {
-    const supabase = createClient();
     const { data } = await supabase
       .from("agents")
       .select("*")
@@ -33,7 +33,7 @@ export function AgentsSettings() {
 
     setAgents(data || []);
     setLoading(false);
-  }, [workspaceId]);
+  }, [workspaceId, supabase]);
 
   useEffect(() => {
     loadAgents();
@@ -58,7 +58,6 @@ export function AgentsSettings() {
 
   async function handleSaveTags(agentId: string) {
     const tagsArray = tagInput.split(",").map(t => t.trim()).filter(Boolean);
-    const supabase = createClient();
     const { error } = await supabase.from("agents").update({ tags: tagsArray }).eq("id", agentId);
     if (!error) {
       setAgents(prev => prev.map(a => a.id === agentId ? { ...a, tags: tagsArray } : a));
@@ -71,7 +70,6 @@ export function AgentsSettings() {
     if (!deleteTarget) return;
     setDeleting(true);
 
-    const supabase = createClient();
     await supabase.from("agents").delete().eq("id", deleteTarget.id);
 
     setAgents((prev) => prev.filter((a) => a.id !== deleteTarget.id));

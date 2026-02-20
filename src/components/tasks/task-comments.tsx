@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useSupabase } from "@/hooks/use-supabase";
 import { useWorkspace } from "@/contexts/workspace-context";
 import { useRealtime } from "@/hooks/use-realtime";
 import { CommentForm } from "./comment-form";
@@ -16,6 +16,7 @@ interface TaskCommentsProps {
 }
 
 export function TaskComments({ taskId }: TaskCommentsProps) {
+  const supabase = useSupabase();
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
   const { userId } = useWorkspace();
@@ -25,7 +26,6 @@ export function TaskComments({ taskId }: TaskCommentsProps) {
     let cancelled = false;
     async function fetchComments() {
       setLoading(true);
-      const supabase = createClient();
       const { data } = await supabase
         .from("task_comments")
         .select("*, agents(name)")
@@ -40,7 +40,7 @@ export function TaskComments({ taskId }: TaskCommentsProps) {
     return () => {
       cancelled = true;
     };
-  }, [taskId]);
+  }, [taskId, supabase]);
 
   // Scroll to bottom when comments change
   useEffect(() => {

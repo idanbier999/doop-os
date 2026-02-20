@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useSupabase } from "@/hooks/use-supabase";
 import { useWorkspace } from "@/contexts/workspace-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardBody } from "@/components/ui/card";
@@ -22,6 +22,7 @@ interface NotificationRow {
 
 export function NotificationSettings() {
   const { workspaceId, userRole } = useWorkspace();
+  const supabase = useSupabase();
   const canEdit = userRole === "owner" || userRole === "admin";
 
   const [loading, setLoading] = useState(true);
@@ -37,7 +38,6 @@ export function NotificationSettings() {
   );
 
   const loadSettings = useCallback(async () => {
-    const supabase = createClient();
     const { data, error } = await supabase
       .from("notification_settings")
       .select("*")
@@ -54,7 +54,7 @@ export function NotificationSettings() {
     setWebhookUrl(row.slack_webhook_url || "");
     setSelectedSeverities(new Set(row.notify_on_problem_severity || ["high", "critical"]));
     setLoading(false);
-  }, [workspaceId]);
+  }, [workspaceId, supabase]);
 
   useEffect(() => {
     loadSettings();
@@ -102,7 +102,6 @@ export function NotificationSettings() {
     setSaving(true);
     setMessage(null);
 
-    const supabase = createClient();
     const { error } = await supabase
       .from("notification_settings")
       .update({

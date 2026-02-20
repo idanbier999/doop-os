@@ -1,23 +1,45 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+import { useState, useEffect } from "react";
 import { Suspense } from "react";
-import { login } from "./actions";
-import { createClient } from "@/lib/supabase/client";
+import { useRouter } from "next/navigation";
+import { authClient } from "@/lib/auth-client";
 
 function LoginForm() {
-  const searchParams = useSearchParams();
-  const error = searchParams.get("error");
-  const message = searchParams.get("message");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const router = useRouter();
+  const { data: session } = authClient.useSession();
+
+  // Redirect authenticated users to dashboard
+  useEffect(() => {
+    if (session?.user) {
+      router.replace("/dashboard");
+    }
+  }, [session, router]);
 
   const handleGoogleSignIn = async () => {
-    const supabase = createClient();
-    await supabase.auth.signInWithOAuth({
+    await authClient.signIn.social({
       provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
+      callbackURL: "/dashboard",
     });
+  };
+
+  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    const formData = new FormData(e.currentTarget);
+    const { error } = await authClient.signIn.email({
+      email: formData.get("email") as string,
+      password: formData.get("password") as string,
+    });
+    if (error) {
+      setError(error.message ?? "Sign in failed");
+      setLoading(false);
+    } else {
+      window.location.href = "/dashboard";
+    }
   };
 
   return (
@@ -38,13 +60,7 @@ function LoginForm() {
             </div>
           )}
 
-          {message && (
-            <div className="mb-4 p-2 border border-[#007700] bg-mac-white text-[#007700] text-sm font-[family-name:var(--font-pixel)]">
-              {message}
-            </div>
-          )}
-
-          <form action={login} className="space-y-4">
+          <form onSubmit={handleLogin} className="space-y-4">
             <div>
               <label
                 htmlFor="email"
@@ -81,9 +97,10 @@ function LoginForm() {
 
             <button
               type="submit"
-              className="w-full rounded-[6px] border border-mac-black bg-mac-black px-4 py-1.5 font-bold text-mac-white hover:bg-mac-dark-gray transition-colors font-[family-name:var(--font-pixel)]"
+              disabled={loading}
+              className="w-full rounded-[6px] border border-mac-black bg-mac-black px-4 py-1.5 font-bold text-mac-white hover:bg-mac-dark-gray transition-colors font-[family-name:var(--font-pixel)] disabled:opacity-50"
             >
-              Sign In
+              {loading ? "Signing in..." : "Sign In"}
             </button>
           </form>
 

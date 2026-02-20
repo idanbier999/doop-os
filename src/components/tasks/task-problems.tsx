@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useSupabase } from "@/hooks/use-supabase";
 import { useWorkspace } from "@/contexts/workspace-context";
 import { useNotifications } from "@/contexts/notification-context";
 import { useRealtime } from "@/hooks/use-realtime";
@@ -23,12 +23,12 @@ export function TaskProblems({ taskId }: TaskProblemsProps) {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const { userId, workspaceId } = useWorkspace();
   const { addToast } = useNotifications();
+  const supabase = useSupabase();
 
   useEffect(() => {
     let cancelled = false;
     async function fetchProblems() {
       setLoading(true);
-      const supabase = createClient();
       const { data } = await supabase
         .from("problems")
         .select("*, agents(name)")
@@ -43,7 +43,7 @@ export function TaskProblems({ taskId }: TaskProblemsProps) {
     return () => {
       cancelled = true;
     };
-  }, [taskId]);
+  }, [taskId, supabase]);
 
   const handlePayload = useCallback(
     (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
@@ -74,7 +74,6 @@ export function TaskProblems({ taskId }: TaskProblemsProps) {
   const updateStatus = async (problemId: string, status: string) => {
     setActionLoading(problemId);
     try {
-      const supabase = createClient();
       const updateData: Record<string, string> = { status };
       if (status === "resolved" || status === "dismissed") {
         updateData.resolved_by = userId;

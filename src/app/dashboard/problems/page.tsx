@@ -1,31 +1,24 @@
 import type { Metadata } from "next";
-import { createClient } from "@/lib/supabase/server";
+import { getAuthenticatedSupabase } from "@/lib/supabase/server-with-auth";
 import { redirect } from "next/navigation";
 import { ProblemsTable } from "@/components/problems/problems-table";
 
 export const metadata: Metadata = { title: "Problems | Mangistew" };
 
 export default async function ProblemsPage() {
-  const supabase = await createClient();
+  const { user, supabase } = await getAuthenticatedSupabase();
+  if (!user || !supabase) redirect("/login");
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/login");
-  }
-
-  // Get workspace membership (RPC bypasses RLS cache issues)
   const { data: membership } = await supabase
-    .rpc("check_user_workspace_membership" as any)
-    .maybeSingle();
+    .from("workspace_members")
+    .select("workspace_id")
+    .eq("user_id", user.id)
+    .limit(1)
+    .single();
 
-  if (!membership) {
-    redirect("/onboarding");
-  }
+  if (!membership) redirect("/onboarding");
 
-  const workspaceId = (membership as any).workspace_id;
+  const workspaceId = membership.workspace_id;
 
   // Fetch workspace-scoped agents first
   const agentsResult = await supabase

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useSupabase } from "@/hooks/use-supabase";
 import { useWorkspace } from "@/contexts/workspace-context";
 import { useNotifications } from "@/contexts/notification-context";
 import { Badge } from "@/components/ui/badge";
@@ -51,6 +51,7 @@ export function TaskDetailDrawer({ task, open, onClose }: TaskDetailDrawerProps)
   const [updating, setUpdating] = useState(false);
   const { workspaceId, userId } = useWorkspace();
   const { addToast } = useNotifications();
+  const supabase = useSupabase();
 
   useEffect(() => {
     if (!open) return;
@@ -72,7 +73,6 @@ export function TaskDetailDrawer({ task, open, onClose }: TaskDetailDrawerProps)
       setUpdating(true);
       try {
         const oldStatus = task.status;
-        const supabase = createClient();
         await supabase.from("tasks").update({ status: newStatus }).eq("id", task.id);
         await supabase.from("activity_log").insert({
           workspace_id: workspaceId,
@@ -92,7 +92,7 @@ export function TaskDetailDrawer({ task, open, onClose }: TaskDetailDrawerProps)
         setUpdating(false);
       }
     },
-    [task, workspaceId, userId, addToast]
+    [task, workspaceId, userId, addToast, supabase]
   );
 
   const handlePriorityChange = useCallback(
@@ -101,7 +101,6 @@ export function TaskDetailDrawer({ task, open, onClose }: TaskDetailDrawerProps)
       setUpdating(true);
       try {
         const oldPriority = task.priority;
-        const supabase = createClient();
         await supabase.from("tasks").update({ priority: newPriority }).eq("id", task.id);
         await supabase.from("activity_log").insert({
           workspace_id: workspaceId,
@@ -121,7 +120,7 @@ export function TaskDetailDrawer({ task, open, onClose }: TaskDetailDrawerProps)
         setUpdating(false);
       }
     },
-    [task, workspaceId, userId, addToast]
+    [task, workspaceId, userId, addToast, supabase]
   );
 
   return (

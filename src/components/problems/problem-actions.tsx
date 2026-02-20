@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useSupabase } from "@/hooks/use-supabase";
 import { useWorkspace } from "@/contexts/workspace-context";
 import { Button } from "@/components/ui/button";
 
@@ -15,10 +15,10 @@ interface ProblemActionsProps {
 export function ProblemActions({ problemId, status, agentId, problemTitle }: ProblemActionsProps) {
   const [loading, setLoading] = useState(false);
   const { userId, workspaceId } = useWorkspace();
+  const supabase = useSupabase();
 
   const updateStatus = async (newStatus: string) => {
     setLoading(true);
-    const supabase = createClient();
     const updateData: Record<string, string> = { status: newStatus };
     if (newStatus === "resolved" || newStatus === "dismissed") {
       updateData.resolved_by = userId;

@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { getAuthenticatedSupabase } from "@/lib/supabase/server-with-auth";
 import { BoardDetailClient } from "@/components/boards/board-detail-client";
 
 interface BoardDetailPageProps {
@@ -10,7 +10,8 @@ export default async function BoardDetailPage({
   params,
 }: BoardDetailPageProps) {
   const { id } = await params;
-  const supabase = await createClient();
+  const { supabase: sb } = await getAuthenticatedSupabase();
+  const supabase = sb!;
 
   // Fetch board
   const { data: board } = await supabase

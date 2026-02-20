@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { authClient } from "@/lib/auth-client";
 import { useMobileSidebar } from "@/contexts/mobile-sidebar-context";
 
 const navItems = [
@@ -36,8 +36,7 @@ export function Sidebar({ userEmail, workspaceName }: SidebarProps) {
   };
 
   const handleLogout = async () => {
-    const supabase = createClient();
-    await supabase.auth.signOut();
+    await authClient.signOut();
     router.push("/login");
   };
 
