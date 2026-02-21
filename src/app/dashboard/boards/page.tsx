@@ -3,7 +3,7 @@ import { getAuthenticatedSupabase } from "@/lib/supabase/server-with-auth";
 import { redirect } from "next/navigation";
 import { BoardsPageClient } from "@/components/boards/boards-page-client";
 
-export const metadata: Metadata = { title: "Boards | Mangistew" };
+export const metadata: Metadata = { title: "Boards | Tarely" };
 
 export default async function BoardsPage() {
   const { user, supabase } = await getAuthenticatedSupabase();

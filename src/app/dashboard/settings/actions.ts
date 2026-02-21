@@ -57,7 +57,7 @@ export async function testSlackWebhook(workspaceId: string) {
           type: "header",
           text: {
             type: "plain_text",
-            text: "Mangistew Test Notification",
+            text: "Tarely Test Notification",
             emoji: true,
           },
         },
@@ -82,7 +82,7 @@ export async function testSlackWebhook(workspaceId: string) {
           type: "section",
           text: {
             type: "mrkdwn",
-            text: "This is a test notification from Mangistew. If you see this message, your Slack webhook is configured correctly.",
+            text: "This is a test notification from Tarely. If you see this message, your Slack webhook is configured correctly.",
           },
         },
       ],

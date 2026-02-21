@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { getAuthenticatedSupabase } from "@/lib/supabase/server-with-auth";
 import { redirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "Fleet | Mangistew" };
+export const metadata: Metadata = { title: "Fleet | Tarely" };
 import { FleetStatsBar } from "@/components/fleet/fleet-stats-bar";
 import { AgentHealthGrid } from "@/components/fleet/agent-health-grid";
 import { ProblemTrendChart } from "@/components/fleet/problem-trend-chart";

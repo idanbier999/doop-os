@@ -51,7 +51,7 @@ function LoginForm() {
         </div>
         <div className="p-6 bg-mac-white">
           <p className="text-sm text-mac-dark-gray mb-6 font-[family-name:var(--font-pixel)]">
-            Sign in to your Mangistew account
+            Sign in to your Tarely account
           </p>
 
           {error && (

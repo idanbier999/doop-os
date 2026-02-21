@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { getAuthenticatedSupabase } from "@/lib/supabase/server-with-auth";
 import { SettingsPageClient } from "@/components/settings/settings-page-client";
 
-export const metadata: Metadata = { title: "Settings | Mangistew" };
+export const metadata: Metadata = { title: "Settings | Tarely" };
 
 export default async function SettingsPage() {
   const { user, supabase } = await getAuthenticatedSupabase();

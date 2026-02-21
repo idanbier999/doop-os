@@ -52,7 +52,7 @@ function SignupForm() {
         </div>
         <div className="p-6 bg-mac-white">
           <p className="text-sm text-mac-dark-gray mb-6 font-[family-name:var(--font-pixel)]">
-            Get started with Mangistew
+            Get started with Tarely
           </p>
 
           {error && (

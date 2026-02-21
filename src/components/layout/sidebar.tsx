@@ -64,7 +64,7 @@ export function Sidebar({ userEmail, workspaceName }: SidebarProps) {
             <div className="w-3 h-5 rounded-sm" style={{
               background: "linear-gradient(to bottom, #61BB46, #FDB827, #F5821F, #E03A3E, #963D97, #009DDC)"
             }} />
-            <h1 className="text-lg font-bold text-mac-black font-[family-name:var(--font-pixel)]">Mangistew</h1>
+            <h1 className="text-lg font-bold text-mac-black font-[family-name:var(--font-pixel)]">Tarely</h1>
           </div>
           <p className="text-[11px] text-mac-dark-gray mt-0.5 truncate font-[family-name:var(--font-pixel)]">{workspaceName}</p>
         </div>

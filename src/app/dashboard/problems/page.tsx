@@ -3,7 +3,7 @@ import { getAuthenticatedSupabase } from "@/lib/supabase/server-with-auth";
 import { redirect } from "next/navigation";
 import { ProblemsTable } from "@/components/problems/problems-table";
 
-export const metadata: Metadata = { title: "Problems | Mangistew" };
+export const metadata: Metadata = { title: "Problems | Tarely" };
 
 export default async function ProblemsPage() {
   const { user, supabase } = await getAuthenticatedSupabase();

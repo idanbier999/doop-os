@@ -86,9 +86,9 @@ export function AgentsPageClient({ initialAgents, agentStats }: AgentsPageClient
       const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
       return JSON.stringify(
         {
-          MANGISTEW_API_BASE_URL: baseUrl,
-          MANGISTEW_AGENT_API_KEY: createdAgent.apiKey,
-          MANGISTEW_AGENT_ID: createdAgent.agentId,
+          TARELY_API_BASE_URL: baseUrl,
+          TARELY_AGENT_API_KEY: createdAgent.apiKey,
+          TARELY_AGENT_ID: createdAgent.agentId,
         },
         null,
         2
@@ -97,11 +97,11 @@ export function AgentsPageClient({ initialAgents, agentStats }: AgentsPageClient
     return JSON.stringify(
       {
         mcpServers: {
-          mangistew: {
+          tarely: {
             command: "node",
-            args: ["path/to/mangistew-mcp/build/index.js"],
+            args: ["path/to/tarely-mcp/build/index.js"],
             env: {
-              MANGISTEW_API_KEY: createdAgent.apiKey,
+              TARELY_API_KEY: createdAgent.apiKey,
             },
           },
         },

@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { getAgentStatsMap } from "@/lib/agent-stats";
 import { AgentsPageClient } from "@/components/agents/agents-page-client";
 
-export const metadata: Metadata = { title: "Agents | Mangistew" };
+export const metadata: Metadata = { title: "Agents | Tarely" };
 
 export default async function AgentsPage() {
   const { user, supabase } = await getAuthenticatedSupabase();

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { getAuthenticatedSupabase } from "@/lib/supabase/server-with-auth";
 import { ActivityTimeline } from "@/components/activity/activity-timeline";
 
-export const metadata: Metadata = { title: "Audit Trail | Mangistew" };
+export const metadata: Metadata = { title: "Audit Trail | Tarely" };
 
 export default async function ActivityPage() {
   const { supabase: sb } = await getAuthenticatedSupabase();

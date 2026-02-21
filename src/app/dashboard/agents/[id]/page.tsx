@@ -24,7 +24,7 @@ export async function generateMetadata({
     .single();
 
   return {
-    title: agent ? `${agent.name} | Mangistew` : "Agent Detail | Mangistew",
+    title: agent ? `${agent.name} | Tarely` : "Agent Detail | Tarely",
   };
 }
 

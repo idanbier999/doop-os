@@ -9,11 +9,11 @@ interface RegisterAgentStepProps {
 
 const mcpConfig = `{
   "mcpServers": {
-    "mangistew": {
+    "tarely": {
       "command": "node",
-      "args": ["path/to/mangistew-mcp/build/index.js"],
+      "args": ["path/to/tarely-mcp/build/index.js"],
       "env": {
-        "MANGISTEW_API_KEY": "your_agent_api_key"
+        "TARELY_API_KEY": "your_agent_api_key"
       }
     }
   }
@@ -40,7 +40,7 @@ export function RegisterAgentStep({ onComplete }: RegisterAgentStepProps) {
         </h2>
         <p className="mt-1 text-sm text-mac-gray">
           Add this MCP configuration to your agent&apos;s client (Claude
-          Desktop, Cursor, etc.) to connect it to Mangistew.
+          Desktop, Cursor, etc.) to connect it to Tarely.
         </p>
       </div>
 

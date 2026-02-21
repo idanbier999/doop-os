@@ -15,7 +15,7 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "Mangistew — Control Plane for Autonomous AI",
+  title: "Tarely — Control Plane for Autonomous AI",
   description: "Audit, govern, and operate your AI agents at scale.",
 };
 
