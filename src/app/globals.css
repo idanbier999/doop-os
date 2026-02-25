@@ -47,7 +47,7 @@
   --color-priority-low: #6B778C;
   --color-priority-medium: #997A00;
   --color-priority-high: #FF8B00;
-  --color-priority-urgent: #DE350B;
+  --color-priority-critical: #DE350B;
 
   /* Task/problem status colors */
   --color-status-pending: #6B778C;

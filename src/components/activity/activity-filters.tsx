@@ -12,11 +12,6 @@ interface Agent {
   name: string;
 }
 
-interface Board {
-  id: string;
-  name: string;
-}
-
 interface ActivityFiltersProps {
   agents: Agent[];
   selectedAgent: string;
@@ -27,9 +22,6 @@ interface ActivityFiltersProps {
   onDateFromChange: (date: string) => void;
   dateTo: string;
   onDateToChange: (date: string) => void;
-  boards: Board[];
-  selectedBoard: string;
-  onBoardChange: (boardId: string) => void;
   onExportCSV: () => void;
   onExportJSON: () => void;
   filteredCount: number;
@@ -53,9 +45,6 @@ export function ActivityFilters({
   onDateFromChange,
   dateTo,
   onDateToChange,
-  boards,
-  selectedBoard,
-  onBoardChange,
   onExportCSV,
   onExportJSON,
   filteredCount,
@@ -63,11 +52,6 @@ export function ActivityFilters({
   const agentOptions = [
     { value: "", label: "All agents" },
     ...agents.map((a) => ({ value: a.id, label: a.name })),
-  ]
-
-  const boardOptions = [
-    { value: "", label: "All boards" },
-    ...boards.map((b) => ({ value: b.id, label: b.name })),
   ]
 
   return (
@@ -84,13 +68,6 @@ export function ActivityFilters({
           options={categoryOptions}
           value={selectedCategory}
           onChange={(e) => onCategoryChange(e.target.value)}
-        />
-      </div>
-      <div className="w-full sm:w-48">
-        <Select
-          options={boardOptions}
-          value={selectedBoard}
-          onChange={(e) => onBoardChange(e.target.value)}
         />
       </div>
       <DateRange

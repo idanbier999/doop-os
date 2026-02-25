@@ -39,7 +39,7 @@ export default async function AgentDetailPage({ params }: AgentDetailPageProps) 
 
   const { data: agent } = await supabase
     .from("agents")
-    .select("id, name, health, stage, agent_type, last_seen_at, workspace_id, tags, description, metadata, platform, created_at, updated_at")
+    .select("id, name, health, stage, agent_type, last_seen_at, workspace_id, tags, description, metadata, platform, created_at, updated_at, capabilities, webhook_url, webhook_secret")
     .eq("id", id)
     .single();
 
@@ -63,7 +63,7 @@ export default async function AgentDetailPage({ params }: AgentDetailPageProps) 
       .order("created_at", { ascending: false }),
     supabase
       .from("tasks")
-      .select("id, title, description, status, priority, agent_id, assigned_to, board_id, result, workspace_id, created_by, created_at, updated_at")
+      .select("id, title, description, status, priority, agent_id, assigned_to, result, workspace_id, created_by, created_at, updated_at, project_id")
       .eq("agent_id", id)
       .order("created_at", { ascending: false }),
     getAgentStats(supabase, id),

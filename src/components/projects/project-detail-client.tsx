@@ -11,7 +11,9 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { FileUpload } from "@/components/ui/file-upload";
 import { ToastContainer, type ToastData } from "@/components/ui/toast";
 import { AgentProgressPanel, type ProjectAgentInfo } from "@/components/projects/agent-progress-panel";
+import { ProjectKanban } from "@/components/projects/project-kanban";
 import { relativeTime, formatDate } from "@/lib/utils";
+import type { TaskWithAgents } from "@/lib/types";
 import {
   updateProjectStatus,
   createProjectTask,
@@ -79,6 +81,7 @@ export interface ProjectDetailClientProps {
   initialDependencies: TaskDependency[];
   initialFiles: ProjectFile[];
   initialActivity: ActivityEntry[];
+  initialProblems: { id: string; task_id: string | null; severity: string; status: string }[];
   workspaceAgents: { id: string; name: string; health: string; stage: string }[];
   webhookStats: { agent_id: string; status: string }[];
   userRole: string;
@@ -92,6 +95,7 @@ export function ProjectDetailClient({
   initialDependencies,
   initialFiles,
   initialActivity,
+  initialProblems,
   workspaceAgents,
   webhookStats,
   workspaceId,
@@ -128,18 +132,41 @@ export function ProjectDetailClient({
   );
 
   const handleTaskUpdate = useCallback(
-    (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
+    async (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
       if (payload.eventType === "INSERT") {
-        setTasks((prev) => [payload.new as Task, ...prev]);
+        const raw = payload.new as Task;
+        // Re-fetch with join so task_agents enrichment is included
+        const { data } = await supabase
+          .from("tasks")
+          .select("*, task_agents(agent_id, role, agents(name))")
+          .eq("id", raw.id)
+          .single();
+        if (data) {
+          setTasks((prev) => {
+            const idx = prev.findIndex((t) => t.id === data.id);
+            if (idx >= 0) {
+              // Replace optimistic entry with enriched data
+              const next = [...prev];
+              next[idx] = data as Task;
+              return next;
+            }
+            return [data as Task, ...prev];
+          });
+        }
       } else if (payload.eventType === "UPDATE") {
         const updated = payload.new as Task;
-        setTasks((prev) => prev.map((t) => (t.id === updated.id ? { ...t, ...updated } : t)));
+        // Preserve task_agents — realtime payloads don't include joined data
+        setTasks((prev) =>
+          prev.map((t) =>
+            t.id === updated.id ? { ...t, ...updated, task_agents: t.task_agents } : t
+          )
+        );
       } else if (payload.eventType === "DELETE") {
         const deleted = payload.old as { id: string };
         setTasks((prev) => prev.filter((t) => t.id !== deleted.id));
       }
     },
-    []
+    [supabase]
   );
 
   const handleAgentUpdate = useCallback(
@@ -220,6 +247,17 @@ export function ProjectDetailClient({
     },
     [project.id, project.status, workspaceId, addToast]
   );
+
+  // Compute problem counts per task for Kanban view
+  const problemCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const p of initialProblems) {
+      if (p.task_id) {
+        counts[p.task_id] = (counts[p.task_id] || 0) + 1;
+      }
+    }
+    return counts;
+  }, [initialProblems]);
 
   // Compute agent progress info for Team tab
   const agentProgressInfos: ProjectAgentInfo[] = useMemo(() => {
@@ -359,6 +397,8 @@ export function ProjectDetailClient({
             dependencies={dependencies}
             projectAgents={projectAgents}
             workspaceId={workspaceId}
+            projectId={project.id}
+            problemCounts={problemCounts}
             onCreateTask={() => setCreateTaskOpen(true)}
             addToast={addToast}
           />
@@ -481,6 +521,8 @@ function TasksTab({
   dependencies,
   projectAgents,
   workspaceId,
+  projectId,
+  problemCounts,
   onCreateTask,
   addToast,
 }: {
@@ -488,9 +530,12 @@ function TasksTab({
   dependencies: TaskDependency[];
   projectAgents: ProjectAgent[];
   workspaceId: string;
+  projectId: string;
+  problemCounts: Record<string, number>;
   onCreateTask: () => void;
   addToast: (toast: Omit<ToastData, "id">) => void;
 }) {
+  const [view, setView] = useState<"list" | "kanban">("list");
   const [dispatchingId, setDispatchingId] = useState<string | null>(null);
 
   const handleDispatchTask = useCallback(
@@ -557,61 +602,98 @@ function TasksTab({
     <div className="mac-window">
       <div className="mac-title-bar">
         <span className="mac-title-bar-title">Tasks ({tasks.length})</span>
-        <Button size="sm" onClick={onCreateTask} className="ml-auto mr-2">
-          + Add Task
-        </Button>
+        <div className="flex items-center gap-1 ml-auto mr-2">
+          <button
+            onClick={() => setView("list")}
+            className={`px-1.5 py-0.5 text-xs font-bold font-[family-name:var(--font-pixel)] border rounded ${
+              view === "list"
+                ? "bg-mac-highlight text-mac-highlight-text border-mac-highlight"
+                : "bg-mac-white text-mac-dark-gray border-mac-border hover:bg-mac-light-gray"
+            }`}
+            title="List view"
+          >
+            ☰
+          </button>
+          <button
+            onClick={() => setView("kanban")}
+            className={`px-1.5 py-0.5 text-xs font-bold font-[family-name:var(--font-pixel)] border rounded ${
+              view === "kanban"
+                ? "bg-mac-highlight text-mac-highlight-text border-mac-highlight"
+                : "bg-mac-white text-mac-dark-gray border-mac-border hover:bg-mac-light-gray"
+            }`}
+            title="Kanban view"
+          >
+            ▦
+          </button>
+          <Button size="sm" onClick={onCreateTask}>
+            + Add Task
+          </Button>
+        </div>
       </div>
-      <div className="divide-y divide-mac-border">
-        {tasks.map((task) => {
-          const assignedAgents = task.task_agents || [];
-          const taskBlockedBy = (blockedBy[task.id] || []).map((id) => taskById[id]?.title ?? id);
-          const taskBlocks = (blocks[task.id] || []).map((id) => taskById[id]?.title ?? id);
 
-          return (
-            <div key={task.id} className="px-4 py-3 flex flex-col gap-1.5 hover:bg-mac-light-gray/40">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-sm font-bold text-mac-black flex-1 min-w-0 truncate">{task.title}</span>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <Badge variant="status" value={task.status} />
-                  <Badge variant="priority" value={task.priority} />
-                  {task.agent_id && task.status === "pending" && (
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      disabled={dispatchingId === task.id}
-                      onClick={() => handleDispatchTask(task.id)}
-                    >
-                      {dispatchingId === task.id ? "Sending..." : "Push to Agent"}
-                    </Button>
+      {view === "kanban" ? (
+        <div className="p-4">
+          <ProjectKanban
+            initialTasks={tasks as unknown as TaskWithAgents[]}
+            projectId={projectId}
+            problemCounts={problemCounts}
+            filters={{ status: "", priority: "", agentId: "" }}
+            onTaskClick={() => {}}
+          />
+        </div>
+      ) : (
+        <div className="divide-y divide-mac-border">
+          {tasks.map((task) => {
+            const assignedAgents = task.task_agents || [];
+            const taskBlockedBy = (blockedBy[task.id] || []).map((id) => taskById[id]?.title ?? id);
+            const taskBlocks = (blocks[task.id] || []).map((id) => taskById[id]?.title ?? id);
+
+            return (
+              <div key={task.id} className="px-4 py-3 flex flex-col gap-1.5 hover:bg-mac-light-gray/40">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm font-bold text-mac-black flex-1 min-w-0 truncate">{task.title}</span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <Badge variant="status" value={task.status} />
+                    <Badge variant="priority" value={task.priority} />
+                    {task.agent_id && task.status === "pending" && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        disabled={dispatchingId === task.id}
+                        onClick={() => handleDispatchTask(task.id)}
+                      >
+                        {dispatchingId === task.id ? "Sending..." : "Push to Agent"}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                {task.description && (
+                  <p className="text-xs text-mac-dark-gray truncate">{task.description}</p>
+                )}
+
+                <div className="flex items-center gap-3 text-xs text-mac-gray flex-wrap">
+                  {assignedAgents.length > 0 && (
+                    <span>
+                      Agent:{" "}
+                      {assignedAgents.map((ta) => ta.agents?.name ?? ta.agent_id).join(", ")}
+                    </span>
                   )}
+                  {taskBlockedBy.length > 0 && (
+                    <span className="text-severity-high">
+                      Blocked by: {taskBlockedBy.join(", ")}
+                    </span>
+                  )}
+                  {taskBlocks.length > 0 && (
+                    <span>Blocks: {taskBlocks.join(", ")}</span>
+                  )}
+                  <span className="ml-auto">{relativeTime(task.created_at)}</span>
                 </div>
               </div>
-
-              {task.description && (
-                <p className="text-xs text-mac-dark-gray truncate">{task.description}</p>
-              )}
-
-              <div className="flex items-center gap-3 text-xs text-mac-gray flex-wrap">
-                {assignedAgents.length > 0 && (
-                  <span>
-                    Agent:{" "}
-                    {assignedAgents.map((ta) => ta.agents?.name ?? ta.agent_id).join(", ")}
-                  </span>
-                )}
-                {taskBlockedBy.length > 0 && (
-                  <span className="text-severity-high">
-                    Blocked by: {taskBlockedBy.join(", ")}
-                  </span>
-                )}
-                {taskBlocks.length > 0 && (
-                  <span>Blocks: {taskBlocks.join(", ")}</span>
-                )}
-                <span className="ml-auto">{relativeTime(task.created_at)}</span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -831,7 +913,6 @@ function CreateTaskModal({
             id: result.taskId!,
             workspace_id: workspaceId,
             project_id: projectId,
-            board_id: null,
             title: title.trim(),
             description: description.trim() || null,
             priority,

@@ -18,13 +18,11 @@ type ActivityEntry = Tables<"activity_log"> & {
 interface ActivityTimelineProps {
   initialEntries: ActivityEntry[];
   agents: { id: string; name: string }[];
-  boards?: { id: string; name: string }[];
 }
 
 export function ActivityTimeline({
   initialEntries,
   agents,
-  boards = [],
 }: ActivityTimelineProps) {
   const { workspaceId } = useWorkspace();
   const { addToast } = useNotifications();
@@ -33,7 +31,6 @@ export function ActivityTimeline({
   const [selectedCategory, setSelectedCategory] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [selectedBoard, setSelectedBoard] = useState("");
 
   const handlePayload = useCallback(
     (payload: { eventType: string; new: Record<string, unknown> }) => {
@@ -135,9 +132,6 @@ export function ActivityTimeline({
         onDateFromChange={setDateFrom}
         dateTo={dateTo}
         onDateToChange={setDateTo}
-        boards={boards}
-        selectedBoard={selectedBoard}
-        onBoardChange={setSelectedBoard}
         onExportCSV={handleExportCSV}
         onExportJSON={handleExportJSON}
         filteredCount={filtered.length}

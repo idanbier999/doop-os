@@ -1,6 +1,83 @@
 "use server";
 
+import { createHmac } from "crypto";
 import { getAuthenticatedSupabase } from "@/lib/supabase/server-with-auth";
+
+export async function testWebhook(agentId: string, workspaceId: string) {
+  try {
+    const { user, supabase } = await getAuthenticatedSupabase();
+    if (!user || !supabase) {
+      return { success: false, error: "Not authenticated" };
+    }
+
+    // Authorize — confirm user is member of workspace
+    const { data: member, error: memberError } = await supabase
+      .from("workspace_members")
+      .select("role")
+      .eq("workspace_id", workspaceId)
+      .eq("user_id", user.id)
+      .single();
+
+    if (memberError || !member) {
+      return { success: false, error: "Not a member of this workspace" };
+    }
+
+    // Fetch agent webhook config
+    const { data: agent, error: agentError } = await supabase
+      .from("agents")
+      .select("webhook_url, webhook_secret, workspace_id")
+      .eq("id", agentId)
+      .single();
+
+    if (agentError || !agent) {
+      return { success: false, error: "Agent not found" };
+    }
+    if (agent.workspace_id !== workspaceId) {
+      return { success: false, error: "Agent does not belong to this workspace" };
+    }
+    if (!agent.webhook_url?.trim()) {
+      return { success: false, error: "No webhook URL configured for this agent" };
+    }
+
+    const payload = {
+      event: "test",
+      agent_id: agentId,
+      timestamp: new Date().toISOString(),
+    };
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+
+    if (agent.webhook_secret) {
+      const signature = createHmac("sha256", agent.webhook_secret)
+        .update(JSON.stringify(payload))
+        .digest("hex");
+      headers["X-Tarely-Signature"] = signature;
+    }
+
+    const response = await fetch(agent.webhook_url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const body = await response.text();
+      return {
+        success: false,
+        error: `Webhook returned ${response.status}: ${body}`,
+      };
+    }
+
+    return { success: true };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Unknown error",
+    };
+  }
+}
 
 export async function testSlackWebhook(workspaceId: string) {
   try {

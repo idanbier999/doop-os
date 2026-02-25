@@ -20,7 +20,6 @@ interface CreateTaskFormProps {
   open: boolean;
   onClose: () => void;
   agents: Agent[];
-  boardId?: string;
 }
 
 const priorityOptions = [
@@ -30,7 +29,7 @@ const priorityOptions = [
   { value: "critical", label: "Critical" },
 ];
 
-export function CreateTaskForm({ open, onClose, agents, boardId }: CreateTaskFormProps) {
+export function CreateTaskForm({ open, onClose, agents }: CreateTaskFormProps) {
   const { workspaceId, userId } = useWorkspace();
   const supabase = useSupabase();
   const router = useRouter();
@@ -60,7 +59,6 @@ export function CreateTaskForm({ open, onClose, agents, boardId }: CreateTaskFor
       assigned_to: null,
       created_by: userId,
       status: "pending",
-      board_id: boardId || null,
     }).select("id").single();
 
     setSubmitting(false);

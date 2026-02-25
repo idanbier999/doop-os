@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useMemo } from "react";
 import { useRealtime } from "@/hooks/use-realtime";
+import { useSupabase } from "@/hooks/use-supabase";
 import { TaskCard } from "@/components/tasks/task-card";
 import type { TaskWithAgents } from "@/lib/types";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
@@ -15,52 +16,71 @@ const COLUMNS = [
   { key: "cancelled", label: "Cancelled", color: "#666666" },
 ] as const;
 
-interface BoardKanbanProps {
+interface ProjectKanbanProps {
   initialTasks: TaskWithAgents[];
-  boardId: string;
+  projectId: string;
   problemCounts: Record<string, number>;
   filters: { status: string; priority: string; agentId: string };
   onTaskClick: (task: TaskWithAgents) => void;
 }
 
-export function BoardKanban({
+export function ProjectKanban({
   initialTasks,
-  boardId,
+  projectId,
   problemCounts,
   filters,
   onTaskClick,
-}: BoardKanbanProps) {
+}: ProjectKanbanProps) {
+  const supabase = useSupabase();
   const [tasks, setTasks] = useState<TaskWithAgents[]>(initialTasks);
 
   const handlePayload = useCallback(
-    (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
+    async (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
       if (payload.eventType === "INSERT") {
-        const newTask = payload.new as unknown as TaskWithAgents;
-        if (newTask.board_id === boardId) {
-          setTasks((prev) => [newTask, ...prev]);
+        const raw = payload.new as { id: string; project_id: string };
+        if (raw.project_id !== projectId) return;
+        // Re-fetch with join so task_agents enrichment is included
+        const { data } = await supabase
+          .from("tasks")
+          .select("*, task_agents(agent_id, role, agents(name))")
+          .eq("id", raw.id)
+          .single();
+        if (data) {
+          setTasks((prev) => {
+            const idx = prev.findIndex((t) => t.id === data.id);
+            if (idx >= 0) {
+              const next = [...prev];
+              next[idx] = data as TaskWithAgents;
+              return next;
+            }
+            return [data as TaskWithAgents, ...prev];
+          });
         }
       } else if (payload.eventType === "UPDATE") {
-        const updated = payload.new as unknown as TaskWithAgents;
-        if (updated.board_id === boardId) {
+        const updated = payload.new as { id: string; project_id: string };
+        if (updated.project_id === projectId) {
+          // Preserve task_agents — realtime payloads don't include joined data
           setTasks((prev) =>
-            prev.map((t) => (t.id === updated.id ? { ...t, ...updated } : t))
+            prev.map((t) =>
+              t.id === updated.id
+                ? { ...t, ...(updated as Partial<TaskWithAgents>), task_agents: t.task_agents }
+                : t
+            )
           );
         } else {
-          // Task moved to another board — remove it
-          const old = payload.old as unknown as { id: string };
-          setTasks((prev) => prev.filter((t) => t.id !== old.id));
+          setTasks((prev) => prev.filter((t) => t.id !== updated.id));
         }
       } else if (payload.eventType === "DELETE") {
         const deleted = payload.old as unknown as { id: string };
         setTasks((prev) => prev.filter((t) => t.id !== deleted.id));
       }
     },
-    [boardId]
+    [projectId, supabase]
   );
 
   useRealtime({
     table: "tasks",
-    filter: `board_id=eq.${boardId}`,
+    filter: `project_id=eq.${projectId}`,
     onPayload: handlePayload,
   });
 

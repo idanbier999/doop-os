@@ -5,7 +5,7 @@ import { useSupabase } from "@/hooks/use-supabase";
 import { useWorkspace } from "@/contexts/workspace-context";
 import { useRouter } from "next/navigation";
 
-type ResultType = "board" | "agent" | "problem" | "task";
+type ResultType = "agent" | "problem" | "task";
 
 interface SearchResult {
   id: string;
@@ -16,7 +16,6 @@ interface SearchResult {
 }
 
 const TYPE_CONFIG: Record<ResultType, { icon: string; label: string }> = {
-  board: { icon: "\u25A6", label: "Boards" },
   agent: { icon: "\u25C6", label: "Agents" },
   problem: { icon: "\u26A0", label: "Problems" },
   task: { icon: "\u2610", label: "Tasks" },
@@ -120,26 +119,6 @@ export function SearchCommand({ externalOpen, onExternalOpenHandled }: SearchCom
       const pattern = `%${query.trim()}%`;
       const allResults: SearchResult[] = [];
 
-      // Search boards
-      const { data: boards } = await supabase
-        .from("boards")
-        .select("id, name, description")
-        .eq("workspace_id", workspaceId)
-        .ilike("name", pattern)
-        .limit(RESULT_LIMIT);
-
-      if (boards) {
-        for (const b of boards) {
-          allResults.push({
-            id: b.id,
-            type: "board",
-            title: b.name,
-            subtitle: b.description ?? undefined,
-            href: `/dashboard/boards/${b.id}`,
-          });
-        }
-      }
-
       // Search agents (name and tags)
       const { data: agents } = await supabase
         .from("agents")
@@ -215,7 +194,7 @@ export function SearchCommand({ externalOpen, onExternalOpenHandled }: SearchCom
       // Search tasks
       const { data: tasks } = await supabase
         .from("tasks")
-        .select("id, title, status, board_id")
+        .select("id, title, status")
         .eq("workspace_id", workspaceId)
         .ilike("title", pattern)
         .limit(RESULT_LIMIT);
@@ -227,9 +206,7 @@ export function SearchCommand({ externalOpen, onExternalOpenHandled }: SearchCom
             type: "task",
             title: t.title,
             subtitle: t.status,
-            href: t.board_id
-              ? `/dashboard/boards/${t.board_id}`
-              : `/dashboard/tasks`,
+            href: `/dashboard/tasks`,
           });
         }
       }
@@ -273,7 +250,7 @@ export function SearchCommand({ externalOpen, onExternalOpenHandled }: SearchCom
 
   // Group results by type
   const groupedResults: { type: ResultType; items: SearchResult[] }[] = [];
-  const typeOrder: ResultType[] = ["board", "agent", "task", "problem"];
+  const typeOrder: ResultType[] = ["agent", "task", "problem"];
   for (const type of typeOrder) {
     const items = results.filter((r) => r.type === type);
     if (items.length > 0) {
@@ -318,7 +295,7 @@ export function SearchCommand({ externalOpen, onExternalOpenHandled }: SearchCom
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Search agents, boards, tasks, problems..."
+              placeholder="Search agents, tasks, problems..."
               className="w-full rounded-md border border-mac-border bg-mac-white px-2 py-1.5 text-sm text-mac-black placeholder-mac-gray focus:outline-none focus:ring-2 focus:ring-mac-highlight font-[family-name:var(--font-pixel)]"
             />
           </div>

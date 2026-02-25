@@ -46,7 +46,7 @@ export default async function DashboardOverviewPage() {
   // First fetch workspace agent IDs for scoping problems
   const { data: wsAgents } = await supabase
     .from("agents")
-    .select("id, name, health, stage, agent_type, last_seen_at, workspace_id, tags, description, metadata, platform, created_at, updated_at")
+    .select("id, name, health, stage, agent_type, last_seen_at, workspace_id, tags, description, metadata, platform, created_at, updated_at, capabilities, webhook_url, webhook_secret")
     .eq("workspace_id", workspaceId);
 
   const agents = wsAgents ?? [];

@@ -35,7 +35,7 @@ const priorityColors: Record<string, string> = {
   low: "border-l-priority-low text-priority-low",
   medium: "border-l-priority-medium text-priority-medium",
   high: "border-l-priority-high text-priority-high",
-  urgent: "border-l-priority-urgent text-priority-urgent",
+  critical: "border-l-priority-critical text-priority-critical",
 };
 
 const variantMap: Record<string, Record<string, string>> = {

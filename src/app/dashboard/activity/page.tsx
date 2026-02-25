@@ -8,14 +8,13 @@ export default async function ActivityPage() {
   const { supabase: sb } = await getAuthenticatedSupabase();
   const supabase = sb!;
 
-  const [entriesResult, agentsResult, boardsResult] = await Promise.all([
+  const [entriesResult, agentsResult] = await Promise.all([
     supabase
       .from("activity_log")
       .select("id, action, details, created_at, agent_id, user_id, workspace_id, agents(name)")
       .order("created_at", { ascending: false })
       .limit(200),
     supabase.from("agents").select("id, name").order("name"),
-    supabase.from("boards").select("id, name").order("name"),
   ]);
 
   return (
@@ -24,7 +23,6 @@ export default async function ActivityPage() {
       <ActivityTimeline
         initialEntries={entriesResult.data || []}
         agents={agentsResult.data || []}
-        boards={boardsResult.data || []}
       />
     </div>
   );
