@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useSupabase } from "@/hooks/use-supabase";
 import { useWorkspace } from "@/contexts/workspace-context";
 import { Modal } from "@/components/ui/modal";
@@ -26,6 +27,7 @@ interface CreateBoardModalProps {
 export function CreateBoardModal({ open, onClose }: CreateBoardModalProps) {
   const { workspaceId, userId } = useWorkspace();
   const supabase = useSupabase();
+  const router = useRouter();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [selectedColor, setSelectedColor] = useState(COLOR_PRESETS[0].value);
@@ -61,6 +63,7 @@ export function CreateBoardModal({ open, onClose }: CreateBoardModalProps) {
     setDescription("");
     setSelectedColor(COLOR_PRESETS[0].value);
     onClose();
+    router.refresh();
   };
 
   return (

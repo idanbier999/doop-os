@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { useWorkspace } from "@/contexts/workspace-context";
 import { useRealtime } from "@/hooks/use-realtime";
 import { AgentCard } from "@/components/dashboard/agent-card";
@@ -20,6 +21,7 @@ interface AgentsPageClientProps {
 
 export function AgentsPageClient({ initialAgents, agentStats }: AgentsPageClientProps) {
   const { workspaceId } = useWorkspace();
+  const router = useRouter();
   const [agents, setAgents] = useState<Agent[]>(initialAgents);
   const [stageFilter, setStageFilter] = useState("");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -53,6 +55,7 @@ export function AgentsPageClient({ initialAgents, agentStats }: AgentsPageClient
   function handleModalClose() {
     setConnectModalOpen(false);
     resetModal();
+    router.refresh();
   }
 
   async function handleCreateAgent() {

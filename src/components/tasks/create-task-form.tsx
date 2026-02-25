@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useSupabase } from "@/hooks/use-supabase";
 import { useWorkspace } from "@/contexts/workspace-context";
 import { Modal } from "@/components/ui/modal";
@@ -26,12 +27,13 @@ const priorityOptions = [
   { value: "low", label: "Low" },
   { value: "medium", label: "Medium" },
   { value: "high", label: "High" },
-  { value: "urgent", label: "Urgent" },
+  { value: "critical", label: "Critical" },
 ];
 
 export function CreateTaskForm({ open, onClose, agents, boardId }: CreateTaskFormProps) {
   const { workspaceId, userId } = useWorkspace();
   const supabase = useSupabase();
+  const router = useRouter();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState("medium");
@@ -109,6 +111,7 @@ export function CreateTaskForm({ open, onClose, agents, boardId }: CreateTaskFor
     setPriority("medium");
     setAgentAssignments([]);
     onClose();
+    router.refresh();
   }
 
   return (

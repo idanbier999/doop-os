@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { useSupabase } from "@/hooks/use-supabase";
 import { useWorkspace } from "@/contexts/workspace-context";
 import { useNotifications } from "@/contexts/notification-context";
@@ -35,7 +36,7 @@ const priorityOptions = [
   { label: "Low", value: "low" },
   { label: "Medium", value: "medium" },
   { label: "High", value: "high" },
-  { label: "Urgent", value: "urgent" },
+  { label: "Critical", value: "critical" },
 ];
 
 type Tab = "comments" | "problems" | "result" | "activity";
@@ -53,6 +54,7 @@ export function TaskDetailDrawer({ task, open, onClose, agents }: TaskDetailDraw
   const { workspaceId, userId } = useWorkspace();
   const { addToast } = useNotifications();
   const supabase = useSupabase();
+  const router = useRouter();
 
   useEffect(() => {
     if (!open) return;
@@ -88,6 +90,7 @@ export function TaskDetailDrawer({ task, open, onClose, agents }: TaskDetailDraw
             new_value: newStatus,
           },
         });
+        router.refresh();
       } catch {
         addToast({ type: "warning", title: "Failed to update task", description: "Please try again" });
       } finally {
@@ -117,6 +120,7 @@ export function TaskDetailDrawer({ task, open, onClose, agents }: TaskDetailDraw
             new_value: newPriority,
           },
         });
+        router.refresh();
       } catch {
         addToast({ type: "warning", title: "Failed to update task", description: "Please try again" });
       } finally {
@@ -197,6 +201,7 @@ export function TaskDetailDrawer({ task, open, onClose, agents }: TaskDetailDraw
             role_changes: roleChanges.map((a) => ({ agent_id: a.agent_id, role: a.role })),
           },
         });
+        router.refresh();
       } catch {
         addToast({ type: "warning", title: "Failed to update agents", description: "Please try again" });
       } finally {
