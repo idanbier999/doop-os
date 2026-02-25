@@ -10,12 +10,11 @@ import { CreateTaskForm } from "@/components/tasks/create-task-form";
 import { TaskDetailDrawer } from "@/components/tasks/task-detail-drawer";
 import { Button } from "@/components/ui/button";
 import type { Tables } from "@/lib/database.types";
-
-type Task = Tables<"tasks"> & { agents?: { name: string } | null };
+import type { TaskWithAgents } from "@/lib/types";
 
 interface BoardDetailClientProps {
   board: Tables<"boards">;
-  initialTasks: Task[];
+  initialTasks: TaskWithAgents[];
   initialProblems: {
     id: string;
     task_id: string | null;
@@ -40,7 +39,7 @@ export function BoardDetailClient({
     dateTo: "",
   });
   const [createOpen, setCreateOpen] = useState(false);
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [selectedTask, setSelectedTask] = useState<TaskWithAgents | null>(null);
 
   const problemCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -56,13 +55,17 @@ export function BoardDetailClient({
     (t) => t.status === "completed"
   ).length;
 
-  const activeAgentIds = new Set(
-    initialTasks
-      .filter(
-        (t) => t.agent_id && t.status !== "completed" && t.status !== "cancelled"
-      )
-      .map((t) => t.agent_id)
-  );
+  const activeAgentIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const t of initialTasks) {
+      if (t.status === "completed" || t.status === "cancelled") continue;
+      if (t.agent_id) ids.add(t.agent_id);
+      if (t.task_agents) {
+        for (const ta of t.task_agents) ids.add(ta.agent_id);
+      }
+    }
+    return ids;
+  }, [initialTasks]);
 
   return (
     <div className="space-y-5">
@@ -120,6 +123,7 @@ export function BoardDetailClient({
         task={selectedTask}
         open={!!selectedTask}
         onClose={() => setSelectedTask(null)}
+        agents={agents}
       />
     </div>
   );

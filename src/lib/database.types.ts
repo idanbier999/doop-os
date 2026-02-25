@@ -344,6 +344,45 @@ export type Database = {
           },
         ]
       }
+      task_agents: {
+        Row: {
+          id: string
+          task_id: string
+          agent_id: string
+          role: string
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          task_id: string
+          agent_id: string
+          role?: string
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          task_id?: string
+          agent_id?: string
+          role?: string
+          created_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_agents_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_agents_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tasks: {
         Row: {
           agent_id: string | null

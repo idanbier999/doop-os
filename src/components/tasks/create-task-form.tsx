@@ -7,6 +7,8 @@ import { Modal } from "@/components/ui/modal";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { AgentMultiSelect } from "@/components/ui/agent-multi-select";
+import type { AgentAssignment } from "@/components/ui/agent-multi-select";
 
 interface Agent {
   id: string;
@@ -33,14 +35,9 @@ export function CreateTaskForm({ open, onClose, agents, boardId }: CreateTaskFor
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState("medium");
-  const [agentId, setAgentId] = useState("");
+  const [agentAssignments, setAgentAssignments] = useState<AgentAssignment[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-
-  const agentOptions = [
-    { value: "", label: "None (unassigned)" },
-    ...agents.map((a) => ({ value: a.id, label: a.name })),
-  ];
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -52,29 +49,65 @@ export function CreateTaskForm({ open, onClose, agents, boardId }: CreateTaskFor
     setSubmitting(true);
     setError("");
 
-    const { error: insertError } = await supabase.from("tasks").insert({
+    const { data: inserted, error: insertError } = await supabase.from("tasks").insert({
       workspace_id: workspaceId,
       title: title.trim(),
       description: description.trim() || null,
       priority,
-      agent_id: agentId || null,
+      agent_id: agentAssignments.find((a) => a.role === "primary")?.agent_id ?? null,
       assigned_to: null,
       created_by: userId,
       status: "pending",
       board_id: boardId || null,
-    });
+    }).select("id").single();
 
     setSubmitting(false);
 
-    if (insertError) {
-      setError(insertError.message);
+    if (insertError || !inserted) {
+      setError(insertError?.message ?? "Failed to create task");
       return;
+    }
+
+    // Insert agent assignments into junction table
+    if (agentAssignments.length > 0) {
+      const { error: junctionError } = await supabase.from("task_agents").insert(
+        agentAssignments.map((a) => ({
+          task_id: inserted.id,
+          agent_id: a.agent_id,
+          role: a.role,
+        }))
+      );
+      if (junctionError) {
+        setError("Task created but agent assignment failed. Please assign agents manually.");
+        console.error("Failed to insert task_agents:", junctionError.message);
+        return;
+      }
+    }
+
+    try {
+      const primaryAgent = agentAssignments.find((a) => a.role === "primary");
+      const agentName = primaryAgent ? agents.find((a) => a.id === primaryAgent.agent_id)?.name ?? null : null;
+      await supabase.from("activity_log").insert({
+        workspace_id: workspaceId,
+        user_id: userId,
+        agent_id: primaryAgent?.agent_id ?? null,
+        action: "task_created",
+        details: {
+          task_id: inserted.id,
+          title: title.trim(),
+          priority,
+          agent_name: agentName,
+          agent_count: agentAssignments.length,
+        },
+      });
+    } catch {
+      // Best-effort: task was already created successfully
     }
 
     setTitle("");
     setDescription("");
     setPriority("medium");
-    setAgentId("");
+    setAgentAssignments([]);
     onClose();
   }
 
@@ -112,12 +145,11 @@ export function CreateTaskForm({ open, onClose, agents, boardId }: CreateTaskFor
           value={priority}
           onChange={(e) => setPriority(e.target.value)}
         />
-        <Select
-          label="Assign to Agent"
-          id="task-agent"
-          options={agentOptions}
-          value={agentId}
-          onChange={(e) => setAgentId(e.target.value)}
+        <AgentMultiSelect
+          label="Assign to Agents"
+          agents={agents}
+          selected={agentAssignments}
+          onChange={setAgentAssignments}
         />
         {error && <p className="text-sm text-severity-critical font-[family-name:var(--font-pixel)]">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">

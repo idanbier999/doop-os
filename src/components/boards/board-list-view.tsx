@@ -5,17 +5,15 @@ import { useRealtime } from "@/hooks/use-realtime";
 import { Table, Thead, Tbody, Tr, Th, Td } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
-import type { Tables } from "@/lib/database.types";
+import type { TaskWithAgents } from "@/lib/types";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 
-type Task = Tables<"tasks"> & { agents?: { name: string } | null };
-
 interface BoardListViewProps {
-  initialTasks: Task[];
+  initialTasks: TaskWithAgents[];
   boardId: string;
   problemCounts: Record<string, number>;
   filters: { status: string; priority: string; agentId: string };
-  onTaskClick: (task: Task) => void;
+  onTaskClick: (task: TaskWithAgents) => void;
 }
 
 function formatDate(dateStr: string | null) {
@@ -35,17 +33,17 @@ export function BoardListView({
   filters,
   onTaskClick,
 }: BoardListViewProps) {
-  const [tasks, setTasks] = useState<Task[]>(initialTasks);
+  const [tasks, setTasks] = useState<TaskWithAgents[]>(initialTasks);
 
   const handlePayload = useCallback(
     (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
       if (payload.eventType === "INSERT") {
-        const newTask = payload.new as unknown as Task;
+        const newTask = payload.new as unknown as TaskWithAgents;
         if (newTask.board_id === boardId) {
           setTasks((prev) => [newTask, ...prev]);
         }
       } else if (payload.eventType === "UPDATE") {
-        const updated = payload.new as unknown as Task;
+        const updated = payload.new as unknown as TaskWithAgents;
         if (updated.board_id === boardId) {
           setTasks((prev) =>
             prev.map((t) => (t.id === updated.id ? { ...t, ...updated } : t))
@@ -72,7 +70,10 @@ export function BoardListView({
     return tasks.filter((t) => {
       if (filters.status && t.status !== filters.status) return false;
       if (filters.priority && t.priority !== filters.priority) return false;
-      if (filters.agentId && t.agent_id !== filters.agentId) return false;
+      if (filters.agentId) {
+        const assignedViaJunction = t.task_agents?.some((ta) => ta.agent_id === filters.agentId);
+        if (!assignedViaJunction && t.agent_id !== filters.agentId) return false;
+      }
       return true;
     });
   }, [tasks, filters]);
@@ -121,7 +122,12 @@ export function BoardListView({
             </Td>
             <Td>
               <span className="text-sm text-mac-black">
-                {task.agents?.name || "-"}
+                {task.task_agents && task.task_agents.length > 0
+                  ? task.task_agents.map((ta) => {
+                      const name = ta.agents?.name;
+                      return name ? (ta.role === "primary" ? `${name} (primary)` : name) : null;
+                    }).filter(Boolean).join(", ")
+                  : task.agents?.name || "-"}
               </span>
             </Td>
             <Td>

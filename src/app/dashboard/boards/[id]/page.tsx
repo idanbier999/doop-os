@@ -25,7 +25,7 @@ export default async function BoardDetailPage({
   // Fetch tasks for this board with agent names
   const { data: tasks } = await supabase
     .from("tasks")
-    .select("*, agents(name)")
+    .select("*, agents(name), task_agents(agent_id, role, agents(name))")
     .eq("board_id", id)
     .order("created_at", { ascending: false });
 

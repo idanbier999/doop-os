@@ -3,7 +3,7 @@
 import { useState, useCallback } from "react";
 import { useRealtime } from "@/hooks/use-realtime";
 import { useWorkspace } from "@/contexts/workspace-context";
-import { Card, CardHeader, CardBody } from "@/components/ui/card";
+
 import { relativeTime } from "@/lib/utils";
 import type { Json } from "@/lib/database.types";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
@@ -60,11 +60,11 @@ export function ActivityFeed({ initialActivity, agents }: ActivityFeedProps) {
   });
 
   return (
-    <Card>
-      <CardHeader>
+    <div className="mac-window flex flex-col" style={{ maxHeight: 400 }}>
+      <div className="shrink-0 px-4 pt-4 pb-2">
         <h2 className="text-sm font-semibold text-mac-black font-[family-name:var(--font-pixel)]">Recent Activity</h2>
-      </CardHeader>
-      <CardBody className="p-0">
+      </div>
+      <div className="flex-1 overflow-y-auto min-h-0">
         {activity.length === 0 ? (
           <p className="px-4 py-8 text-center text-sm text-mac-gray font-[family-name:var(--font-pixel)]">
             No activity yet
@@ -89,7 +89,7 @@ export function ActivityFeed({ initialActivity, agents }: ActivityFeedProps) {
             ))}
           </ul>
         )}
-      </CardBody>
-    </Card>
+      </div>
+    </div>
   );
 }

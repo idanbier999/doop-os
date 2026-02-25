@@ -1,12 +1,10 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
-import type { Tables } from "@/lib/database.types";
-
-type Task = Tables<"tasks"> & { agents?: { name: string } | null };
+import type { TaskWithAgents } from "@/lib/types";
 
 interface TaskCardProps {
-  task: Task;
+  task: TaskWithAgents;
   onClick?: () => void;
   problemCount?: number;
 }
@@ -54,11 +52,17 @@ export function TaskCard({ task, onClick, problemCount }: TaskCardProps) {
       )}
       <div className="flex items-center gap-2 flex-wrap">
         <Badge variant="priority" value={task.priority} />
-        {task.agents?.name && (
-          <span className="text-xs text-mac-dark-gray truncate max-w-[120px]">
-            {task.agents.name}
-          </span>
-        )}
+        {(() => {
+          const primary = task.task_agents?.find((ta) => ta.role === "primary");
+          const helperCount = (task.task_agents?.length ?? 0) - (primary ? 1 : 0);
+          const agentName = primary?.agents?.name ?? task.agents?.name;
+          if (!agentName) return null;
+          return (
+            <span className="text-xs text-mac-dark-gray truncate max-w-[120px]">
+              {agentName}{helperCount > 0 ? ` +${helperCount}` : ""}
+            </span>
+          );
+        })()}
       </div>
       <div className="mt-2 text-xs text-mac-gray">
         {formatDate(task.created_at)}

@@ -3,10 +3,8 @@
 import { useState, useCallback, useMemo } from "react";
 import { useRealtime } from "@/hooks/use-realtime";
 import { TaskCard } from "@/components/tasks/task-card";
-import type { Tables } from "@/lib/database.types";
+import type { TaskWithAgents } from "@/lib/types";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
-
-type Task = Tables<"tasks"> & { agents?: { name: string } | null };
 
 const COLUMNS = [
   { key: "pending", label: "Pending", color: "#666666" },
@@ -18,11 +16,11 @@ const COLUMNS = [
 ] as const;
 
 interface BoardKanbanProps {
-  initialTasks: Task[];
+  initialTasks: TaskWithAgents[];
   boardId: string;
   problemCounts: Record<string, number>;
   filters: { status: string; priority: string; agentId: string };
-  onTaskClick: (task: Task) => void;
+  onTaskClick: (task: TaskWithAgents) => void;
 }
 
 export function BoardKanban({
@@ -32,17 +30,17 @@ export function BoardKanban({
   filters,
   onTaskClick,
 }: BoardKanbanProps) {
-  const [tasks, setTasks] = useState<Task[]>(initialTasks);
+  const [tasks, setTasks] = useState<TaskWithAgents[]>(initialTasks);
 
   const handlePayload = useCallback(
     (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
       if (payload.eventType === "INSERT") {
-        const newTask = payload.new as unknown as Task;
+        const newTask = payload.new as unknown as TaskWithAgents;
         if (newTask.board_id === boardId) {
           setTasks((prev) => [newTask, ...prev]);
         }
       } else if (payload.eventType === "UPDATE") {
-        const updated = payload.new as unknown as Task;
+        const updated = payload.new as unknown as TaskWithAgents;
         if (updated.board_id === boardId) {
           setTasks((prev) =>
             prev.map((t) => (t.id === updated.id ? { ...t, ...updated } : t))
@@ -70,7 +68,10 @@ export function BoardKanban({
     return tasks.filter((t) => {
       if (filters.status && t.status !== filters.status) return false;
       if (filters.priority && t.priority !== filters.priority) return false;
-      if (filters.agentId && t.agent_id !== filters.agentId) return false;
+      if (filters.agentId) {
+        const assignedViaJunction = t.task_agents?.some((ta) => ta.agent_id === filters.agentId);
+        if (!assignedViaJunction && t.agent_id !== filters.agentId) return false;
+      }
       return true;
     });
   }, [tasks, filters]);
