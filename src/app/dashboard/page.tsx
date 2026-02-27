@@ -24,6 +24,12 @@ function buildDateBuckets(days: number): { keys: string[]; map: Record<string, s
   return { keys, map };
 }
 
+function isProblemTrendEmpty(
+  data: Array<{ low: number; medium: number; high: number; critical: number }>
+): boolean {
+  return data.every((d) => d.low === 0 && d.medium === 0 && d.high === 0 && d.critical === 0);
+}
+
 export default async function DashboardOverviewPage() {
   const { user, supabase } = await getAuthenticatedSupabase();
   if (!user || !supabase) redirect("/login");
@@ -43,6 +49,11 @@ export default async function DashboardOverviewPage() {
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
   const sevenDaysAgoISO = sevenDaysAgo.toISOString();
 
+  const yesterdayEOD = new Date();
+  yesterdayEOD.setDate(yesterdayEOD.getDate() - 1);
+  yesterdayEOD.setHours(23, 59, 59, 999);
+  const yesterdayEODISO = yesterdayEOD.toISOString();
+
   // First fetch workspace agent IDs for scoping problems
   const { data: wsAgents } = await supabase
     .from("agents")
@@ -52,46 +63,91 @@ export default async function DashboardOverviewPage() {
   const agents = wsAgents ?? [];
   const agentIds = agents.map((a) => a.id);
 
-  const [tasksResult, activityResult, openProblemsResult, recentProblemsResult, recentTasksResult] =
-    await Promise.all([
-      supabase
-        .from("tasks")
-        .select("id, status")
-        .eq("workspace_id", workspaceId),
-      supabase
-        .from("activity_log")
-        .select("*, agents(name)")
-        .eq("workspace_id", workspaceId)
-        .order("created_at", { ascending: false })
-        .limit(20),
-      // All open problems (not limited to 7 days) for stats bar
-      agentIds.length > 0
-        ? supabase
-            .from("problems")
-            .select("severity")
-            .eq("status", "open")
-            .in("agent_id", agentIds)
-        : Promise.resolve({ data: [] }),
-      // Recent problems (7 days) for trend chart
-      agentIds.length > 0
-        ? supabase
-            .from("problems")
-            .select("created_at, severity")
-            .in("agent_id", agentIds)
-            .gte("created_at", sevenDaysAgoISO)
-        : Promise.resolve({ data: [] }),
-      supabase
-        .from("tasks")
-        .select("created_at, updated_at, status")
-        .eq("workspace_id", workspaceId)
-        .gte("created_at", sevenDaysAgoISO),
-    ]);
+  const [
+    tasksResult,
+    activityResult,
+    openProblemsResult,
+    recentProblemsResult,
+    recentTasksResult,
+    activeAgentTasksResult,
+    agentHealthHistoryResult,
+    yesterdayProblemsResult,
+    yesterdayTasksResult,
+  ] = await Promise.all([
+    supabase
+      .from("tasks")
+      .select("id, status")
+      .eq("workspace_id", workspaceId),
+    supabase
+      .from("activity_log")
+      .select("*, agents(name)")
+      .eq("workspace_id", workspaceId)
+      .order("created_at", { ascending: false })
+      .limit(20),
+    // All open problems (not limited to 7 days) for stats bar
+    agentIds.length > 0
+      ? supabase
+          .from("problems")
+          .select("severity")
+          .eq("status", "open")
+          .in("agent_id", agentIds)
+      : Promise.resolve({ data: [] }),
+    // Recent problems (7 days) for trend chart
+    agentIds.length > 0
+      ? supabase
+          .from("problems")
+          .select("created_at, severity")
+          .in("agent_id", agentIds)
+          .gte("created_at", sevenDaysAgoISO)
+      : Promise.resolve({ data: [] }),
+    supabase
+      .from("tasks")
+      .select("created_at, updated_at, status")
+      .eq("workspace_id", workspaceId)
+      .gte("created_at", sevenDaysAgoISO),
+    // Active agent tasks — for "Working on" in agent grid
+    agentIds.length > 0
+      ? supabase
+          .from("tasks")
+          .select("agent_id, title")
+          .in("agent_id", agentIds)
+          .in("status", ["in_progress", "waiting_on_agent"])
+      : Promise.resolve({ data: [] }),
+    // Agent health history (7 days) — for sparklines in agent grid
+    agentIds.length > 0
+      ? supabase
+          .from("agent_updates")
+          .select("agent_id, health, created_at")
+          .in("agent_id", agentIds)
+          .gte("created_at", sevenDaysAgoISO)
+      : Promise.resolve({ data: [] }),
+    // Yesterday snapshot: open problems as of yesterday EOD
+    agentIds.length > 0
+      ? supabase
+          .from("problems")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "open")
+          .in("agent_id", agentIds)
+          .lte("created_at", yesterdayEODISO)
+      : Promise.resolve({ count: 0 }),
+    // Yesterday snapshot: tasks in-flight as of yesterday EOD
+    supabase
+      .from("tasks")
+      .select("id", { count: "exact", head: true })
+      .eq("workspace_id", workspaceId)
+      .in("status", ["in_progress", "waiting_on_agent", "waiting_on_human"])
+      .lte("created_at", yesterdayEODISO),
+  ]);
 
   const tasks = tasksResult.data ?? [];
   const activity = activityResult.data ?? [];
   const openProblemsRaw = openProblemsResult.data ?? [];
   const recentProblems = recentProblemsResult.data ?? [];
   const recentTasks = recentTasksResult.data ?? [];
+  const activeAgentTasks = activeAgentTasksResult.data ?? [];
+  const agentHealthHistoryRaw = agentHealthHistoryResult.data ?? [];
+  const yesterdayOpenProblems = (yesterdayProblemsResult as { count: number | null }).count ?? 0;
+  const yesterdayTasksInFlight = (yesterdayTasksResult as { count: number | null }).count ?? 0;
 
   // Agent health counts
   const agentCounts = { total: agents.length, healthy: 0, degraded: 0, critical: 0, offline: 0 };
@@ -113,7 +169,7 @@ export default async function DashboardOverviewPage() {
     (t) => t.status === "in_progress" || t.status === "waiting_on_agent" || t.status === "waiting_on_human"
   ).length;
 
-  // Problem trend (7 days) — recentProblems already scoped to workspace
+  // Problem trend (7 days)
   const { keys: dateKeys, map: dateLabels } = buildDateBuckets(7);
   const problemTrend = dateKeys.map((iso) => {
     const dayProblems = recentProblems.filter(
@@ -142,26 +198,60 @@ export default async function DashboardOverviewPage() {
     return { date: dateLabels[iso], created, completed };
   });
 
+  // Sparkline arrays for stats bar (7 entries each — daily new problem / task count)
+  const problemsSparkline = dateKeys.map((iso) => ({
+    value: recentProblems.filter(
+      (p) => p.created_at && p.created_at.slice(0, 10) === iso
+    ).length,
+  }));
+
+  const tasksSparkline = dateKeys.map((iso) => ({
+    value: recentTasks.filter(
+      (t) => t.created_at && t.created_at.slice(0, 10) === iso
+    ).length,
+  }));
+
+  // Agent current task map
+  const agentCurrentTask: Record<string, string> = {};
+  for (const t of activeAgentTasks) {
+    if (t.agent_id) agentCurrentTask[t.agent_id] = t.title;
+  }
+
+  // Agent health history map
+  const agentHealthHistory: Record<string, Array<{ health: string | null; created_at: string | null }>> = {};
+  for (const u of agentHealthHistoryRaw) {
+    const aid = (u as { agent_id: string }).agent_id;
+    if (!agentHealthHistory[aid]) agentHealthHistory[aid] = [];
+    agentHealthHistory[aid].push({
+      health: (u as { health: string | null }).health,
+      created_at: (u as { created_at: string | null }).created_at,
+    });
+  }
+
   return (
     <div className="space-y-4">
       <FleetStatsBar
         initialAgentCounts={agentCounts}
         initialOpenProblems={openProblemsData}
         initialTasksInFlight={tasksInFlight}
+        problemsSparkline={problemsSparkline}
+        tasksSparkline={tasksSparkline}
+        yesterdayOpenProblems={yesterdayOpenProblems}
+        yesterdayTasksInFlight={yesterdayTasksInFlight}
       />
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        <div className="xl:col-span-2">
-          <AgentHealthGrid initialAgents={agents} />
-        </div>
-        <div>
-          <ActivityFeed
-            initialActivity={activity}
-            agents={agents.map((a) => ({ id: a.id, name: a.name }))}
-          />
-        </div>
-      </div>
+      <AgentHealthGrid
+        initialAgents={agents}
+        agentCurrentTask={agentCurrentTask}
+        agentHealthHistory={agentHealthHistory}
+      />
+      <ActivityFeed
+        initialActivity={activity}
+        agents={agents.map((a) => ({ id: a.id, name: a.name }))}
+      />
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <ProblemTrendChart initialData={problemTrend} />
+        {!isProblemTrendEmpty(problemTrend) && (
+          <ProblemTrendChart initialData={problemTrend} />
+        )}
         <TaskThroughputChart initialData={taskThroughput} />
       </div>
     </div>

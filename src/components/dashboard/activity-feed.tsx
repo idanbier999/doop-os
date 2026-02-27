@@ -19,18 +19,41 @@ type ActivityEntry = {
   agents: { name: string } | null;
 };
 
-const actionLabels: Record<string, string> = {
-  agent_registered: "Agent registered",
-  status_update: "Status updated",
-  problem_reported: "Problem reported",
-  task_created: "Task created",
-  task_completed: "Task completed",
-  task_updated: "Task updated",
-  task_comment: "Commented on task",
-  problem_acknowledged: "Problem acknowledged",
-  problem_resolved: "Problem resolved",
-  problem_dismissed: "Problem dismissed",
-};
+function getActivityDescription(entry: ActivityEntry): string {
+  const details = entry.details as Record<string, unknown> | null;
+  const title = (details?.title || details?.task_title) as string | undefined;
+
+  switch (entry.action) {
+    case "task_completed":
+      return title ? `completed '${title}'` : "completed a task";
+    case "task_created":
+      return title ? `created '${title}'` : "created a task";
+    case "task_updated":
+      return title ? `updated '${title}'` : "updated a task";
+    case "status_update": {
+      const status = (details?.new_status || details?.health) as string | undefined;
+      return status ? `status → ${status}` : "sent a status update";
+    }
+    case "problem_reported": {
+      const severity = details?.severity as string | undefined;
+      const msg = details?.message as string | undefined;
+      if (msg) return `reported: ${msg}`;
+      return severity ? `reported a ${severity} problem` : "reported a problem";
+    }
+    case "problem_acknowledged":
+      return "acknowledged a problem";
+    case "problem_resolved":
+      return "resolved a problem";
+    case "problem_dismissed":
+      return "dismissed a problem";
+    case "task_comment":
+      return title ? `commented on '${title}'` : "commented on a task";
+    case "agent_registered":
+      return "registered";
+    default:
+      return entry.action.replace(/_/g, " ");
+  }
+}
 
 interface ActivityFeedProps {
   initialActivity: ActivityEntry[];
@@ -60,7 +83,7 @@ export function ActivityFeed({ initialActivity, agents }: ActivityFeedProps) {
   });
 
   return (
-    <div className="mac-window flex flex-col" style={{ maxHeight: 400 }}>
+    <div className="mac-window flex flex-col max-h-[400px]">
       <div className="shrink-0 px-4 pt-4 pb-2">
         <h2 className="text-sm font-semibold text-mac-black font-[family-name:var(--font-pixel)]">Recent Activity</h2>
       </div>
@@ -79,7 +102,7 @@ export function ActivityFeed({ initialActivity, agents }: ActivityFeedProps) {
                     <span className="font-medium text-mac-black">
                       {entry.agents?.name || "System"}
                     </span>{" "}
-                    {actionLabels[entry.action] || entry.action}
+                    {getActivityDescription(entry)}
                   </p>
                   <p className="mt-0.5 text-xs text-mac-gray font-[family-name:var(--font-pixel)]">
                     {relativeTime(entry.created_at)}

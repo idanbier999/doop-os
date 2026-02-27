@@ -19,9 +19,12 @@ const healthToColor: Record<string, string> = {
 interface HealthSparklineProps {
   updates: Array<{ health: string | null; created_at: string | null }>;
   currentHealth: string;
+  width?: number;
+  height?: number;
+  strokeWidth?: number;
 }
 
-export function HealthSparkline({ updates, currentHealth }: HealthSparklineProps) {
+export function HealthSparkline({ updates, currentHealth, width = 120, height = 40, strokeWidth = 1.5 }: HealthSparklineProps) {
   if (!updates || updates.length === 0) return null;
 
   const data = updates
@@ -39,14 +42,14 @@ export function HealthSparkline({ updates, currentHealth }: HealthSparklineProps
   const lineColor = healthToColor[currentHealth] ?? healthToColor.offline;
 
   return (
-    <div style={{ width: 120, height: 40 }}>
+    <div style={{ width, height }}>
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data}>
           <Line
             type="monotone"
             dataKey="value"
             stroke={lineColor}
-            strokeWidth={1.5}
+            strokeWidth={strokeWidth}
             dot={false}
             isAnimationActive={false}
           />
