@@ -5,6 +5,7 @@ import { useRealtime } from "@/hooks/use-realtime";
 import { useWorkspace } from "@/contexts/workspace-context";
 
 import { relativeTime } from "@/lib/utils";
+import { EmptyState } from "@/components/ui/empty-state";
 import type { Json } from "@/lib/database.types";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 
@@ -89,9 +90,10 @@ export function ActivityFeed({ initialActivity, agents }: ActivityFeedProps) {
       </div>
       <div className="flex-1 overflow-y-auto min-h-0">
         {activity.length === 0 ? (
-          <p className="px-4 py-8 text-center text-sm text-mac-gray font-[family-name:var(--font-pixel)]">
-            No activity yet
-          </p>
+          <EmptyState
+            message="No activity yet"
+            description="Activity appears here when agents send heartbeats, complete tasks, or report problems."
+          />
         ) : (
           <ul className="divide-y divide-mac-border">
             {activity.map((entry) => (

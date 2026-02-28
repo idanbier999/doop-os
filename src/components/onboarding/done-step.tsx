@@ -25,10 +25,10 @@ export function DoneStep() {
       </div>
       <div>
         <h2 className="text-xl font-semibold text-mac-black">
-          Your control plane is ready
+          You&apos;re all set
         </h2>
         <p className="mt-2 text-sm text-mac-gray">
-          Head to the dashboard to start auditing and governing your AI agents.
+          Your workspace is created and your first agent is registered. Head to the dashboard to monitor it.
         </p>
       </div>
       <Button onClick={() => router.push("/dashboard")} size="lg">

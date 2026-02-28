@@ -10,6 +10,7 @@ const steps = ["Set Up Control Plane", "Connect Agent", "Done"];
 
 export function OnboardingWizard() {
   const [step, setStep] = useState(0);
+  const [workspaceId, setWorkspaceId] = useState<string>("");
   const supabase = useSupabase();
 
   return (
@@ -53,11 +54,11 @@ export function OnboardingWizard() {
           {step === 0 && (
             <CreateWorkspaceStep
               supabase={supabase}
-              onComplete={() => setStep(1)}
+              onComplete={(id: string) => { setWorkspaceId(id); setStep(1); }}
             />
           )}
           {step === 1 && (
-            <RegisterAgentStep onComplete={() => setStep(2)} />
+            <RegisterAgentStep workspaceId={workspaceId} onComplete={() => setStep(2)} />
           )}
           {step === 2 && <DoneStep />}
         </div>

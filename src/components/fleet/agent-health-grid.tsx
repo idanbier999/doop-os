@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { HealthSparkline } from "@/components/agents/health-sparkline";
@@ -9,6 +10,7 @@ import { useRealtime } from "@/hooks/use-realtime";
 import { useSupabase } from "@/hooks/use-supabase";
 import { useWorkspace } from "@/contexts/workspace-context";
 import { relativeTime } from "@/lib/utils";
+import { EmptyState } from "@/components/ui/empty-state";
 import type { Tables } from "@/lib/database.types";
 
 type Agent = Omit<Tables<"agents">, "api_key">;
@@ -61,6 +63,7 @@ export function AgentHealthGrid({
   const [currentTasks, setCurrentTasks] = useState<Record<string, string>>(agentCurrentTask);
   const { workspaceId } = useWorkspace();
   const supabase = useSupabase();
+  const router = useRouter();
 
   const handleRealtimeChange = useCallback(
     (payload: { eventType: string; new?: Record<string, unknown>; old?: Record<string, unknown> }) => {
@@ -109,9 +112,12 @@ export function AgentHealthGrid({
   if (agents.length === 0) {
     return (
       <Card title="Agent Fleet">
-        <p className="text-sm text-mac-gray py-8 text-center">
-          No agents registered — connect your first agent via MCP
-        </p>
+        <EmptyState
+          message="No agents registered"
+          description="Connect your first agent to see real-time health and status here."
+          actionLabel="Go to Agents"
+          onAction={() => router.push("/dashboard/agents")}
+        />
       </Card>
     );
   }

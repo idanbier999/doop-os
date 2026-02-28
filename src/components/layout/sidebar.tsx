@@ -11,7 +11,8 @@ const navItems = [
   { label: "Agents", href: "/dashboard/agents", icon: "◆" },
   { label: "Audit Trail", href: "/dashboard/activity", icon: "◷" },
   { label: "Problems", href: "/dashboard/problems", icon: "⚠" },
-{ label: "Projects", href: "/dashboard/projects", icon: "◈" },
+  { label: "Projects", href: "/dashboard/projects", icon: "◈" },
+  { label: "API Docs", href: "/dashboard/docs", icon: "◎" },
   { label: "Settings", href: "/dashboard/settings", icon: "⚙" },
 ];
 

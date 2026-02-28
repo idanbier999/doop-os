@@ -8,6 +8,7 @@ import { AgentHealthGrid } from "@/components/fleet/agent-health-grid";
 import { ProblemTrendChart } from "@/components/fleet/problem-trend-chart";
 import { TaskThroughputChart } from "@/components/fleet/task-throughput-chart";
 import { ActivityFeed } from "@/components/dashboard/activity-feed";
+import { WelcomeBanner } from "@/components/dashboard/welcome-banner";
 
 function buildDateBuckets(days: number): { keys: string[]; map: Record<string, string> } {
   const keys: string[] = [];
@@ -61,6 +62,7 @@ export default async function DashboardOverviewPage() {
     .eq("workspace_id", workspaceId);
 
   const agents = wsAgents ?? [];
+  const hasAgents = agents.length > 0;
   const agentIds = agents.map((a) => a.id);
 
   const [
@@ -239,6 +241,7 @@ export default async function DashboardOverviewPage() {
         yesterdayOpenProblems={yesterdayOpenProblems}
         yesterdayTasksInFlight={yesterdayTasksInFlight}
       />
+      {!hasAgents && <WelcomeBanner />}
       <AgentHealthGrid
         initialAgents={agents}
         agentCurrentTask={agentCurrentTask}
@@ -252,7 +255,7 @@ export default async function DashboardOverviewPage() {
         {!isProblemTrendEmpty(problemTrend) && (
           <ProblemTrendChart initialData={problemTrend} />
         )}
-        <TaskThroughputChart initialData={taskThroughput} />
+        {hasAgents && <TaskThroughputChart initialData={taskThroughput} />}
       </div>
     </div>
   );
