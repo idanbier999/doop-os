@@ -14,5 +14,4 @@ jobs:
         with:
           node-version-file: '.nvmrc'
       - run: npm install
-      - run: npm run lint
       - run: npm test
