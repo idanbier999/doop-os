@@ -2,16 +2,19 @@
 
 import { useState } from "react";
 import { Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 
 function SignupForm() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const searchParams = useSearchParams();
+  const redirect = searchParams.get("redirect") || "/dashboard";
 
   const handleGoogleSignUp = async () => {
     await authClient.signIn.social({
       provider: "google",
-      callbackURL: "/dashboard",
+      callbackURL: redirect,
     });
   };
 
@@ -39,7 +42,7 @@ function SignupForm() {
       setError(error.message ?? "Sign up failed");
       setLoading(false);
     } else {
-      window.location.href = "/dashboard";
+      window.location.href = redirect;
     }
   };
 
@@ -143,7 +146,7 @@ function SignupForm() {
 
           <p className="mt-6 text-center text-sm text-mac-dark-gray font-[family-name:var(--font-pixel)]">
             Already have an account?{" "}
-            <a href="/login" className="text-mac-highlight underline hover:no-underline">
+            <a href={redirect !== "/dashboard" ? `/login?redirect=${encodeURIComponent(redirect)}` : "/login"} className="text-mac-highlight underline hover:no-underline">
               Sign in
             </a>
           </p>

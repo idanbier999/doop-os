@@ -2,26 +2,28 @@
 
 import { useState, useEffect } from "react";
 import { Suspense } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 
 function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirect = searchParams.get("redirect") || "/dashboard";
   const { data: session } = authClient.useSession();
 
   // Redirect authenticated users to dashboard
   useEffect(() => {
     if (session?.user) {
-      router.replace("/dashboard");
+      router.replace(redirect);
     }
   }, [session, router]);
 
   const handleGoogleSignIn = async () => {
     await authClient.signIn.social({
       provider: "google",
-      callbackURL: "/dashboard",
+      callbackURL: redirect,
     });
   };
 
@@ -38,7 +40,7 @@ function LoginForm() {
       setError(error.message ?? "Sign in failed");
       setLoading(false);
     } else {
-      window.location.href = "/dashboard";
+      window.location.href = redirect;
     }
   };
 
@@ -123,7 +125,7 @@ function LoginForm() {
 
           <p className="mt-6 text-center text-sm text-mac-dark-gray font-[family-name:var(--font-pixel)]">
             Don&apos;t have an account?{" "}
-            <a href="/signup" className="text-mac-highlight underline hover:no-underline">
+            <a href={redirect !== "/dashboard" ? `/signup?redirect=${encodeURIComponent(redirect)}` : "/signup"} className="text-mac-highlight underline hover:no-underline">
               Sign up
             </a>
           </p>
