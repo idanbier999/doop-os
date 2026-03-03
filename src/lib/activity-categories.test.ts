@@ -4,9 +4,9 @@ import { CATEGORY_ACTIONS, ALL_KNOWN_ACTIONS } from "./activity-categories";
 describe("CATEGORY_ACTIONS", () => {
   it("has the expected category keys", () => {
     expect(Object.keys(CATEGORY_ACTIONS)).toEqual(
-      expect.arrayContaining(["agent_lifecycle", "task_events", "problems", "settings"])
+      expect.arrayContaining(["agent_lifecycle", "task_events", "problems"])
     );
-    expect(Object.keys(CATEGORY_ACTIONS)).toHaveLength(4);
+    expect(Object.keys(CATEGORY_ACTIONS)).toHaveLength(3);
   });
 
   it("each category has a non-empty array of actions", () => {

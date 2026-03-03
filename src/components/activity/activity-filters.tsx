@@ -32,7 +32,6 @@ const categoryOptions = [
   { value: "agent_lifecycle", label: "Agent Lifecycle" },
   { value: "task_events", label: "Task Events" },
   { value: "problems", label: "Problems" },
-  { value: "settings", label: "Settings" },
   { value: "audit_trail", label: "Audit Trail" },
 ]
 
