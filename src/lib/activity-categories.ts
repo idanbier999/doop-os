@@ -6,6 +6,7 @@ export const CATEGORY_ACTIONS: Record<string, string[]> = {
   agent_lifecycle: ["agent_registered", "status_update"],
   task_events: ["task_created", "task_updated", "task_completed", "task_comment"],
   problems: ["problem_reported"],
+  settings: ["quota.updated", "quota.deleted"],
 };
 
 export const ALL_KNOWN_ACTIONS: string[] = Object.values(CATEGORY_ACTIONS).flat();
