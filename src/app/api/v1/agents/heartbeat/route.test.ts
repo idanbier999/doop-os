@@ -25,6 +25,10 @@ vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: vi.fn(),
 }));
 
+vi.mock("@/lib/api-rate-limit", () => ({
+  withRateLimit: (handler: Function) => handler,
+}));
+
 import { authenticateAgent } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { POST } from "./route";

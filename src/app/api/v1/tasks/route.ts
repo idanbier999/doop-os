@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateAgent } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { withRateLimit } from "@/lib/api-rate-limit";
 
-export async function GET(request: NextRequest) {
+async function handleGet(request: NextRequest) {
   const agent = await authenticateAgent(request);
   if (!agent) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -38,3 +39,5 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({ tasks: data });
 }
+
+export const GET = withRateLimit(handleGet);

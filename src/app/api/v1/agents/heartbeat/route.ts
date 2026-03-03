@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateAgent } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { withRateLimit } from "@/lib/api-rate-limit";
 import type { Json } from "@/lib/database.types";
 
-export async function POST(request: NextRequest) {
+async function handlePost(request: NextRequest) {
   const agent = await authenticateAgent(request);
   if (!agent) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -54,3 +55,5 @@ export async function POST(request: NextRequest) {
 
   return NextResponse.json({ ok: true });
 }
+
+export const POST = withRateLimit(handlePost);

@@ -4,7 +4,6 @@ export interface MockSupabaseChain {
   select: ReturnType<typeof vi.fn>;
   insert: ReturnType<typeof vi.fn>;
   update: ReturnType<typeof vi.fn>;
-  upsert: ReturnType<typeof vi.fn>;
   delete: ReturnType<typeof vi.fn>;
   eq: ReturnType<typeof vi.fn>;
   neq: ReturnType<typeof vi.fn>;
@@ -28,7 +27,6 @@ export function createMockSupabaseClient() {
     select: vi.fn(),
     insert: vi.fn(),
     update: vi.fn(),
-    upsert: vi.fn(),
     delete: vi.fn(),
     eq: vi.fn(),
     neq: vi.fn(),
