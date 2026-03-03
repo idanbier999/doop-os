@@ -122,6 +122,51 @@ export type Database = {
           },
         ]
       }
+      agent_quotas: {
+        Row: {
+          agent_id: string | null
+          created_at: string
+          id: string
+          max_requests_per_hour: number
+          max_requests_per_minute: number
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          agent_id?: string | null
+          created_at?: string
+          id?: string
+          max_requests_per_hour?: number
+          max_requests_per_minute?: number
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          agent_id?: string | null
+          created_at?: string
+          id?: string
+          max_requests_per_hour?: number
+          max_requests_per_minute?: number
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_quotas_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_quotas_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       agent_updates: {
         Row: {
           agent_id: string
@@ -477,6 +522,41 @@ export type Database = {
             columns: ["workspace_id"]
             isOneToOne: false
             referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rate_limit_windows: {
+        Row: {
+          agent_id: string
+          created_at: string
+          id: string
+          request_count: number
+          window_start: string
+          window_type: string
+        }
+        Insert: {
+          agent_id: string
+          created_at?: string
+          id?: string
+          request_count?: number
+          window_start: string
+          window_type: string
+        }
+        Update: {
+          agent_id?: string
+          created_at?: string
+          id?: string
+          request_count?: number
+          window_start?: string
+          window_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rate_limit_windows_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
             referencedColumns: ["id"]
           },
         ]
@@ -1030,6 +1110,14 @@ export type Database = {
         Returns: string
       }
       get_user_workspace_ids: { Args: { uid: string }; Returns: string[] }
+      increment_rate_limit: {
+        Args: {
+          p_agent_id: string
+          p_window_start: string
+          p_window_type: string
+        }
+        Returns: number
+      }
       get_workspace_member_emails: {
         Args: { ws_id: string }
         Returns: {
@@ -1037,6 +1125,7 @@ export type Database = {
           user_id: string
         }[]
       }
+      mark_stale_agents_offline: { Args: never; Returns: undefined }
       is_workspace_admin_or_owner: {
         Args: { uid: string; ws_id: string }
         Returns: boolean

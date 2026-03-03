@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { createAgent } from "@/app/dashboard/agents/actions";
+import { AgentQuotas } from "@/components/agents/agent-quotas";
 import type { Tables } from "@/lib/database.types";
 
 type Agent = Omit<Tables<"agents">, "api_key">;
@@ -226,6 +227,11 @@ export function AgentsPageClient({ initialAgents, agentStats }: AgentsPageClient
           ))}
         </div>
       )}
+
+      <AgentQuotas
+        agents={agents.map(a => ({ id: a.id, name: a.name }))}
+        workspaceId={workspaceId}
+      />
 
       <Modal open={connectModalOpen} onClose={handleModalClose} title="Connect a New Agent">
         {modalStep === "form" ? (
