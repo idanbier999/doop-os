@@ -54,7 +54,7 @@ async function handleGet(request: NextRequest, context?: unknown) {
       id: string;
       name: string;
       capabilities: string[] | null;
-      agent_type: string;
+      agent_type: string | null;
       health: string;
       webhook_url: string | null;
     } | null;

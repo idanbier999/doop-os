@@ -146,13 +146,14 @@ async function handlePost(request: NextRequest) {
   }
 
   // Secondary inserts — await to ensure completion before response (serverless safety)
-  const secondaryInserts: Promise<unknown>[] = [];
+  const secondaryInserts: PromiseLike<unknown>[] = [];
 
   if (body.agent_id && typeof body.agent_id === "string") {
     secondaryInserts.push(
       supabase
         .from("task_agents")
         .insert({ task_id: task.id, agent_id: body.agent_id as string, role: "assignee" })
+        .then()
     );
   }
 
@@ -162,7 +163,7 @@ async function handlePost(request: NextRequest) {
       depends_on_task_id: depId,
     }));
     secondaryInserts.push(
-      supabase.from("task_dependencies").insert(depRows)
+      supabase.from("task_dependencies").insert(depRows).then()
     );
   }
 
@@ -175,6 +176,7 @@ async function handlePost(request: NextRequest) {
         action: "task_created_by_agent",
         details: { task_id: task.id, title: body.title, project_id: body.project_id } as unknown as Json,
       })
+      .then()
   );
 
   const settledResults = await Promise.allSettled(secondaryInserts);
