@@ -3,6 +3,7 @@
 import { getAuthenticatedSupabase } from "@/lib/supabase/server-with-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { dispatchToAgent } from "@/lib/webhook-dispatch";
+import { deliverTaskToAgent } from "@/lib/task-delivery";
 
 export async function createProject(data: {
   workspaceId: string;
@@ -236,7 +237,7 @@ export async function dispatchTaskToAgent(taskId: string, workspaceId: string) {
 
   const { data: task, error: taskError } = await supabase
     .from("tasks")
-    .select("*, project:projects(id, name, instructions, orchestration_mode)")
+    .select("id, title, agent_id")
     .eq("id", taskId)
     .eq("workspace_id", workspaceId)
     .single();
@@ -244,34 +245,20 @@ export async function dispatchTaskToAgent(taskId: string, workspaceId: string) {
   if (taskError || !task) return { success: false, error: "Task not found" };
   if (!task.agent_id) return { success: false, error: "Task has no assigned agent" };
 
-  const taskPayload = {
-    event: "task.assigned",
-    timestamp: new Date().toISOString(),
-    task: {
-      id: task.id,
-      title: task.title,
-      description: task.description,
-      priority: task.priority,
-      status: task.status,
-    },
-    project: task.project ?? null,
-    agent: { id: task.agent_id },
-  };
+  const delivery = await deliverTaskToAgent(taskId, task.agent_id, workspaceId);
 
-  const result = await dispatchToAgent(task.agent_id, taskPayload, task.id);
-
-  if (result.success) {
+  if (delivery.success) {
     await supabase.from("activity_log").insert({
       workspace_id: workspaceId,
       user_id: user.id,
-      action: "task_dispatched",
+      action: delivery.method === "webhook" ? "task_dispatched" : "task_queued",
       details: { task_id: task.id, title: task.title, agent_id: task.agent_id },
     });
   }
 
-  return result.success
-    ? { success: true }
-    : { success: false, error: result.error };
+  return delivery.success
+    ? { success: true as const, method: delivery.method }
+    : { success: false as const, error: delivery.error };
 }
 
 export async function createProjectTask(data: {

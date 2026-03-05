@@ -17,6 +17,10 @@ vi.mock("@/lib/webhook-dispatch", () => ({
   dispatchToAgent: vi.fn().mockResolvedValue({ success: true, deliveryId: "d-1" }),
 }));
 
+vi.mock("@/lib/task-delivery", () => ({
+  deliverTaskToAgent: vi.fn().mockResolvedValue({ success: true, method: "webhook" }),
+}));
+
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: vi.fn(() => {
     // Return a mock admin client whose from() returns default chains
@@ -30,6 +34,7 @@ vi.mock("@/lib/supabase/admin", () => ({
 // Import AFTER vi.mock
 import { getAuthenticatedSupabase } from "@/lib/supabase/server-with-auth";
 import { dispatchToAgent } from "@/lib/webhook-dispatch";
+import { deliverTaskToAgent } from "@/lib/task-delivery";
 import {
   createProject,
   updateProjectStatus,
@@ -49,6 +54,8 @@ beforeEach(() => {
   });
   // Reset dispatchToAgent to default success
   (dispatchToAgent as any).mockResolvedValue({ success: true, deliveryId: "d-1" });
+  // Reset deliverTaskToAgent to default success
+  (deliverTaskToAgent as any).mockResolvedValue({ success: true, method: "webhook" });
 });
 
 // ───────────────────── helpers ─────────────────────
@@ -328,15 +335,7 @@ describe("dispatchTaskToAgent", () => {
     mockSupabase.from.mockReturnValueOnce(memberChainOk());
     // 2. tasks.select (no agent_id)
     mockSupabase.from.mockReturnValueOnce(
-      okChain({
-        id: "t-1",
-        title: "Do thing",
-        description: "desc",
-        priority: "high",
-        status: "pending",
-        agent_id: null,
-        project: { id: "p-1", name: "Proj", instructions: "i", orchestration_mode: "manual" },
-      })
+      okChain({ id: "t-1", title: "Do thing", agent_id: null })
     );
 
     const result = await dispatchTaskToAgent("t-1", "ws-1");
@@ -345,19 +344,13 @@ describe("dispatchTaskToAgent", () => {
   });
 
   it("dispatches webhook and logs activity on success", async () => {
+    (deliverTaskToAgent as any).mockResolvedValue({ success: true, method: "webhook" });
+
     // 1. workspace_members
     mockSupabase.from.mockReturnValueOnce(memberChainOk());
     // 2. tasks.select
     mockSupabase.from.mockReturnValueOnce(
-      okChain({
-        id: "t-1",
-        title: "Do thing",
-        description: "desc",
-        priority: "high",
-        status: "pending",
-        agent_id: "agent-1",
-        project: { id: "p-1", name: "Proj", instructions: "i", orchestration_mode: "manual" },
-      })
+      okChain({ id: "t-1", title: "Do thing", agent_id: "agent-1" })
     );
     // 3. activity_log
     const activityChain = okChain(null);
@@ -365,33 +358,43 @@ describe("dispatchTaskToAgent", () => {
 
     const result = await dispatchTaskToAgent("t-1", "ws-1");
 
-    expect(result).toEqual({ success: true });
-    expect(dispatchToAgent).toHaveBeenCalledWith(
-      "agent-1",
-      expect.objectContaining({ event: "task.assigned" }),
-      "t-1"
-    );
+    expect(result).toEqual({ success: true, method: "webhook" });
+    expect(deliverTaskToAgent).toHaveBeenCalledWith("t-1", "agent-1", "ws-1");
     expect(activityChain.insert).toHaveBeenCalledWith(
       expect.objectContaining({ action: "task_dispatched" })
     );
   });
 
-  it("returns error on dispatch failure", async () => {
-    (dispatchToAgent as any).mockResolvedValue({ success: false, error: "Connection refused" });
+  it("queues task for polling agent", async () => {
+    (deliverTaskToAgent as any).mockResolvedValue({ success: true, method: "queue" });
 
     // 1. workspace_members
     mockSupabase.from.mockReturnValueOnce(memberChainOk());
     // 2. tasks.select
     mockSupabase.from.mockReturnValueOnce(
-      okChain({
-        id: "t-1",
-        title: "Do thing",
-        description: "desc",
-        priority: "high",
-        status: "pending",
-        agent_id: "agent-1",
-        project: null,
-      })
+      okChain({ id: "t-1", title: "Do thing", agent_id: "agent-1" })
+    );
+    // 3. activity_log
+    const activityChain = okChain(null);
+    mockSupabase.from.mockReturnValueOnce(activityChain);
+
+    const result = await dispatchTaskToAgent("t-1", "ws-1");
+
+    expect(result).toEqual({ success: true, method: "queue" });
+    expect(deliverTaskToAgent).toHaveBeenCalledWith("t-1", "agent-1", "ws-1");
+    expect(activityChain.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "task_queued" })
+    );
+  });
+
+  it("returns error on dispatch failure", async () => {
+    (deliverTaskToAgent as any).mockResolvedValue({ success: false, method: "webhook", error: "Connection refused" });
+
+    // 1. workspace_members
+    mockSupabase.from.mockReturnValueOnce(memberChainOk());
+    // 2. tasks.select
+    mockSupabase.from.mockReturnValueOnce(
+      okChain({ id: "t-1", title: "Do thing", agent_id: "agent-1" })
     );
 
     const result = await dispatchTaskToAgent("t-1", "ws-1");

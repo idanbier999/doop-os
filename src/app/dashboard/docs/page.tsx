@@ -16,10 +16,10 @@ function EndpointHeading({
   method,
   path,
 }: {
-  method: "GET" | "POST";
+  method: "GET" | "POST" | "PATCH";
   path: string;
 }) {
-  const color = method === "POST" ? "bg-green-600" : "bg-blue-600";
+  const color = method === "POST" ? "bg-green-600" : method === "PATCH" ? "bg-amber-600" : "bg-blue-600";
   return (
     <h3 className="flex items-center gap-3 mt-8 mb-3">
       <span
@@ -233,6 +233,93 @@ export default function ApiDocsPage() {
 # → {"ok":true}`}
           </CodeBlock>
 
+          {/* Create Task */}
+          <EndpointHeading method="POST" path="/api/v1/tasks" />
+          <p className="text-mac-dark-gray mb-2">
+            Create a new task. The creating agent must be a member of the target project.
+            Setting <code className="bg-mac-light-gray px-1.5 py-0.5 rounded text-sm font-mono">agent_id</code> without{" "}
+            <code className="bg-mac-light-gray px-1.5 py-0.5 rounded text-sm font-mono">depends_on</code> triggers
+            auto-delivery to the assigned agent.
+          </p>
+          <ParamTable
+            params={[
+              { name: "title", type: "string", required: true, description: "Task title" },
+              { name: "project_id", type: "string", required: true, description: "Project to create the task in" },
+              { name: "description", type: "string", required: false, description: "Task description" },
+              { name: "priority", type: "string", required: false, description: "\"low\" | \"medium\" | \"high\" | \"critical\" (default: \"medium\")" },
+              { name: "agent_id", type: "string", required: false, description: "Assign to a specific agent (must be a project member)" },
+              { name: "depends_on", type: "string[]", required: false, description: "Array of task IDs this task depends on" },
+            ]}
+          />
+          <p className="text-xs text-mac-dark-gray mb-1 font-[family-name:var(--font-pixel)]">
+            Example
+          </p>
+          <CodeBlock>
+            {`curl -X POST https://your-tarely.app/api/v1/tasks \\
+  -H "Authorization: Bearer ta_live_abc123" \\
+  -H "Content-Type: application/json" \\
+  -d '{"title":"Process data","project_id":"proj_xxx","agent_id":"agent_yyy"}'
+
+# → {"task":{"id":"...","title":"Process data","status":"pending",...},"delivery":{"success":true,"method":"webhook"}}`}
+          </CodeBlock>
+
+          {/* Update Task */}
+          <EndpointHeading method="PATCH" path="/api/v1/tasks/{id}" />
+          <p className="text-mac-dark-gray mb-2">
+            Update a task. Status changes are validated against the state machine and
+            use optimistic locking to prevent race conditions.
+          </p>
+          <ParamTable
+            params={[
+              { name: "status", type: "string", required: false, description: "New status (validated against transition rules)" },
+              { name: "agent_id", type: "string", required: false, description: "Reassign to a different agent" },
+              { name: "title", type: "string", required: false, description: "Updated title" },
+              { name: "description", type: "string", required: false, description: "Updated description" },
+              { name: "priority", type: "string", required: false, description: "Updated priority" },
+              { name: "result", type: "object", required: false, description: "Result data (typically set on completion)" },
+            ]}
+          />
+
+          <p className="text-xs text-mac-dark-gray mb-1 font-[family-name:var(--font-pixel)]">
+            Status Transitions
+          </p>
+          <CodeBlock>
+            {`pending          → in_progress, waiting_on_agent, cancelled
+in_progress      → waiting_on_agent, waiting_on_human, completed, cancelled
+waiting_on_agent → in_progress, completed, cancelled
+waiting_on_human → in_progress, completed, cancelled
+completed        → (terminal)
+cancelled        → (terminal)`}
+          </CodeBlock>
+
+          <p className="text-xs text-mac-dark-gray mb-1 font-[family-name:var(--font-pixel)]">
+            Example
+          </p>
+          <CodeBlock>
+            {`curl -X PATCH https://your-tarely.app/api/v1/tasks/task_abc123 \\
+  -H "Authorization: Bearer ta_live_abc123" \\
+  -H "Content-Type: application/json" \\
+  -d '{"status":"in_progress"}'
+
+# → {"task":{"id":"task_abc123","status":"in_progress",...}}`}
+          </CodeBlock>
+
+          {/* Get Project */}
+          <EndpointHeading method="GET" path="/api/v1/projects/{id}" />
+          <p className="text-mac-dark-gray mb-2">
+            Get full project context including team members and files.
+            The requesting agent must be a member of the project.
+          </p>
+          <p className="text-xs text-mac-dark-gray mb-1 font-[family-name:var(--font-pixel)]">
+            Example
+          </p>
+          <CodeBlock>
+            {`curl "https://your-tarely.app/api/v1/projects/proj_xxxxxxxx" \\
+  -H "Authorization: Bearer ta_live_abc123"
+
+# → {"project":{...},"team":[...],"files":[...],"agent_role":"member"}`}
+          </CodeBlock>
+
           {/* ── 3. Platform Setup ────────────────────────────── */}
           <SectionHeading>Platform Setup</SectionHeading>
 
@@ -324,6 +411,58 @@ function verifySignature(payload: string, signature: string, secret: string) {
   "agent_id": "agent_xxxxxxxx",
   "workspace_id": "ws_xxxxxxxx",
   "timestamp": "2026-02-28T12:00:00Z"
+}`}
+          </CodeBlock>
+
+          <p className="text-xs text-mac-dark-gray mb-1 font-[family-name:var(--font-pixel)]">
+            task.completed
+          </p>
+          <CodeBlock>
+            {`{
+  "event": "task.completed",
+  "task_id": "task_xxxxxxxx",
+  "project_id": "proj_xxxxxxxx",
+  "result": { "output": "Processed 42 records" },
+  "timestamp": "2026-02-28T12:05:00Z"
+}`}
+          </CodeBlock>
+
+          <p className="text-xs text-mac-dark-gray mb-1 font-[family-name:var(--font-pixel)]">
+            task.status_changed
+          </p>
+          <CodeBlock>
+            {`{
+  "event": "task.status_changed",
+  "task_id": "task_xxxxxxxx",
+  "project_id": "proj_xxxxxxxx",
+  "old_status": "pending",
+  "new_status": "in_progress",
+  "timestamp": "2026-02-28T12:01:00Z"
+}`}
+          </CodeBlock>
+
+          {/* ── Error Responses ──────────────────────────────── */}
+          <SectionHeading>Error Responses</SectionHeading>
+
+          <p className="text-mac-dark-gray mb-3">
+            The API uses standard HTTP status codes. Here are common error responses:
+          </p>
+
+          <p className="text-xs text-mac-dark-gray mb-1 font-[family-name:var(--font-pixel)]">
+            422 — Invalid Status Transition
+          </p>
+          <CodeBlock>
+            {`{
+  "error": "Invalid status transition from completed to in_progress"
+}`}
+          </CodeBlock>
+
+          <p className="text-xs text-mac-dark-gray mb-1 font-[family-name:var(--font-pixel)]">
+            409 — Conflict (Race Condition)
+          </p>
+          <CodeBlock>
+            {`{
+  "error": "Conflict: task status has changed"
 }`}
           </CodeBlock>
         </div>

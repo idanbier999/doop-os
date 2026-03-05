@@ -28,8 +28,13 @@ vi.mock("@/lib/api-rate-limit", () => ({
   withRateLimit: (handler: Function) => handler,
 }));
 
+vi.mock("@/lib/task-delivery", () => ({
+  notifyLeadAgent: vi.fn(),
+}));
+
 import { authenticateAgent } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { notifyLeadAgent } from "@/lib/task-delivery";
 import { POST } from "./route";
 
 // ---------------------------------------------------------------------------
@@ -218,5 +223,82 @@ describe("POST /api/v1/tasks/[id]/complete", () => {
       })
     );
     expect(updateChain.eq).toHaveBeenCalledWith("id", "task-001");
+  });
+
+  it("calls notifyLeadAgent with correct args after successful completion", async () => {
+    const selectChain = createMockSupabaseClient().chain;
+    mockResolve(selectChain, { id: "task-001", title: "Test task", project_id: "proj-1" });
+
+    const updateChain = createMockSupabaseClient().chain;
+    mockResolve(updateChain, null);
+
+    mockSupabase.from
+      .mockReturnValueOnce(selectChain)
+      .mockReturnValueOnce(updateChain);
+
+    const request = new NextRequest(
+      "http://localhost/api/v1/tasks/task-001/complete",
+      {
+        method: "POST",
+        headers: { Authorization: "Bearer test-key" },
+      }
+    );
+
+    await POST(request, makeParams("task-001"));
+
+    expect(notifyLeadAgent).toHaveBeenCalledWith("proj-1", "task.completed", {
+      task_id: "task-001",
+      title: "Test task",
+    });
+  });
+
+  it("returns 409 when task is already completed", async () => {
+    const selectChain = createMockSupabaseClient().chain;
+    mockResolve(selectChain, { id: "task-001", title: "Test task", project_id: null });
+
+    const updateChain = createMockSupabaseClient().chain;
+    mockReject(updateChain, { code: "PGRST116", message: "0 rows" });
+
+    mockSupabase.from
+      .mockReturnValueOnce(selectChain)
+      .mockReturnValueOnce(updateChain);
+
+    const request = new NextRequest(
+      "http://localhost/api/v1/tasks/task-001/complete",
+      {
+        method: "POST",
+        headers: { Authorization: "Bearer test-key" },
+      }
+    );
+
+    const response = await POST(request, makeParams("task-001"));
+    const json = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(json.error).toBe("Task is already completed or cancelled");
+  });
+
+  it("does not call notifyLeadAgent when task has no project_id", async () => {
+    const selectChain = createMockSupabaseClient().chain;
+    mockResolve(selectChain, { id: "task-001", title: "Test task", project_id: null });
+
+    const updateChain = createMockSupabaseClient().chain;
+    mockResolve(updateChain, null);
+
+    mockSupabase.from
+      .mockReturnValueOnce(selectChain)
+      .mockReturnValueOnce(updateChain);
+
+    const request = new NextRequest(
+      "http://localhost/api/v1/tasks/task-001/complete",
+      {
+        method: "POST",
+        headers: { Authorization: "Bearer test-key" },
+      }
+    );
+
+    await POST(request, makeParams("task-001"));
+
+    expect(notifyLeadAgent).not.toHaveBeenCalled();
   });
 });

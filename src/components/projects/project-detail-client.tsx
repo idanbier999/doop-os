@@ -544,7 +544,9 @@ function TasksTab({
       try {
         const result = await dispatchTaskToAgent(taskId, workspaceId);
         if (result.success) {
-          addToast({ type: "info", title: "Task dispatched", description: "Webhook sent to agent" });
+          const title = result.method === "queue" ? "Task queued for agent" : "Task dispatched";
+          const description = result.method === "queue" ? "Agent will pick it up on next poll" : "Webhook sent to agent";
+          addToast({ type: "info", title, description });
         } else {
           addToast({ type: "critical", title: "Dispatch failed", description: result.error });
         }
@@ -578,6 +580,12 @@ function TasksTab({
     for (const t of tasks) map[t.id] = t;
     return map;
   }, [tasks]);
+
+  const agentById = useMemo(() => {
+    const map: Record<string, ProjectAgent["agent"]> = {};
+    for (const pa of projectAgents) map[pa.agent_id] = pa.agent;
+    return map;
+  }, [projectAgents]);
 
   if (tasks.length === 0) {
     return (
@@ -655,15 +663,20 @@ function TasksTab({
                   <div className="flex items-center gap-1.5 shrink-0">
                     <Badge variant="status" value={task.status} />
                     <Badge variant="priority" value={task.priority} />
-                    {task.agent_id && task.status === "pending" && (
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        disabled={dispatchingId === task.id}
-                        onClick={() => handleDispatchTask(task.id)}
-                      >
-                        {dispatchingId === task.id ? "Sending..." : "Push to Agent"}
-                      </Button>
+                    {task.agent_id && (task.status === "pending" || task.status === "waiting_on_agent") && (
+                      <div className="flex items-center gap-1.5">
+                        {task.status === "waiting_on_agent" && (
+                          <span className="text-xs text-mac-gray">Queued</span>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          disabled={dispatchingId === task.id || task.status === "waiting_on_agent"}
+                          onClick={() => handleDispatchTask(task.id)}
+                        >
+                          {dispatchingId === task.id ? "Sending..." : "Push to Agent"}
+                        </Button>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -674,9 +687,19 @@ function TasksTab({
 
                 <div className="flex items-center gap-3 text-xs text-mac-gray flex-wrap">
                   {assignedAgents.length > 0 && (
-                    <span>
+                    <span className="flex items-center gap-1">
                       Agent:{" "}
-                      {assignedAgents.map((ta) => ta.agents?.name ?? ta.agent_id).join(", ")}
+                      {assignedAgents.map((ta, i) => {
+                        const agent = agentById[ta.agent_id];
+                        const health = agent?.health;
+                        return (
+                          <span key={ta.agent_id} className="inline-flex items-center gap-1">
+                            {i > 0 && ", "}
+                            <span className={`inline-block w-1.5 h-1.5 rounded-full ${health === "healthy" ? "bg-green-500" : "bg-gray-400"}`} />
+                            {ta.agents?.name ?? ta.agent_id}
+                          </span>
+                        );
+                      })}
                     </span>
                   )}
                   {taskBlockedBy.length > 0 && (
