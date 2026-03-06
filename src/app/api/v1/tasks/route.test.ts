@@ -192,7 +192,7 @@ describe("POST /api/v1/tasks", () => {
       get() {
         const value = values[callIndex] ?? { data: null, error: null };
         callIndex++;
-        return (resolve: (val: unknown) => void) => resolve(value);
+        return (resolve?: (val: unknown) => void) => resolve ? resolve(value) : Promise.resolve(value);
       },
       configurable: true,
       enumerable: false,
