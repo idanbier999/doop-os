@@ -16,7 +16,7 @@ const MAX_TOASTS = 3;
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<ToastData[]>([]);
-  const { workspaceId } = useWorkspace();
+  const { workspaceId, userId, fleetScope } = useWorkspace();
   const counterRef = useRef(0);
 
   const addToast = useCallback((toast: Omit<ToastData, "id">) => {
@@ -37,10 +37,12 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   const supabase = useSupabase();
 
-  // Subscribe to Supabase Realtime for new problems
+  // Subscribe to Supabase Realtime for problems, agent-offline, and task-failure alerts.
+  // All three channels are torn down and re-subscribed when fleetScope toggles,
+  // which is intentional so that notifications immediately reflect the new scope.
   useEffect(() => {
 
-    const channel = supabase
+    const problemsChannel = supabase
       .channel("toast-problems")
       .on(
         "postgres_changes",
@@ -64,11 +66,12 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
           // Fetch agent name and verify workspace ownership
           const { data: agent } = await supabase
             .from("agents")
-            .select("name, workspace_id")
+            .select("name, workspace_id, owner_id")
             .eq("id", problem.agent_id)
             .single();
 
           if (!agent || agent.workspace_id !== workspaceId) return;
+          if (fleetScope === "mine" && agent.owner_id !== userId) return;
 
           addToast({
             type: problem.severity === "critical" ? "critical" : "warning",
@@ -79,10 +82,83 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       )
       .subscribe();
 
+    const agentOfflineChannel = supabase
+      .channel("toast-agent-offline")
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "agents",
+        },
+        (payload) => {
+          const newAgent = payload.new as {
+            workspace_id: string;
+            health: string;
+            name: string;
+            owner_id: string | null;
+          };
+          const oldAgent = payload.old as {
+            health?: string;
+          };
+
+          if (newAgent.workspace_id !== workspaceId) return;
+          if (newAgent.health !== "offline") return;
+          // Skip if the agent was already offline (unless old health is unavailable)
+          if (oldAgent.health === "offline") return;
+          if (fleetScope === "mine" && newAgent.owner_id !== userId) return;
+
+          addToast({
+            type: "warning",
+            title: `Agent offline: ${newAgent.name}`,
+          });
+        }
+      )
+      .subscribe();
+
+    const taskFailureChannel = supabase
+      .channel("toast-task-failure")
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "tasks",
+        },
+        async (payload) => {
+          const newTask = payload.new as {
+            workspace_id: string;
+            status: string;
+            agent_id: string | null;
+            title: string;
+          };
+
+          if (newTask.workspace_id !== workspaceId) return;
+          if (newTask.status !== "cancelled") return;
+          if (!newTask.agent_id) return;
+
+          const { data: agent } = await supabase
+            .from("agents")
+            .select("name, owner_id")
+            .eq("id", newTask.agent_id)
+            .single();
+
+          if (fleetScope === "mine" && agent?.owner_id !== userId) return;
+
+          addToast({
+            type: "warning",
+            title: `Task cancelled: ${newTask.title}`,
+          });
+        }
+      )
+      .subscribe();
+
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(problemsChannel);
+      supabase.removeChannel(agentOfflineChannel);
+      supabase.removeChannel(taskFailureChannel);
     };
-  }, [supabase, workspaceId, addToast]);
+  }, [supabase, workspaceId, addToast, fleetScope, userId]);
 
   return (
     <NotificationContext.Provider value={{ addToast, dismissToast }}>

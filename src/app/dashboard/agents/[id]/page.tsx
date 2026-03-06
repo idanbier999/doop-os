@@ -9,6 +9,7 @@ import { Timeline } from "@/components/agents/timeline";
 import { AgentProblemsPanel } from "@/components/agents/agent-problems-panel";
 import { AgentTasksPanel } from "@/components/agents/agent-tasks-panel";
 import { MetadataViewer } from "@/components/agents/metadata-viewer";
+import { AgentDetailActions } from "@/components/agents/agent-detail-actions";
 
 export async function generateMetadata({
   params,
@@ -34,12 +35,12 @@ interface AgentDetailPageProps {
 
 export default async function AgentDetailPage({ params }: AgentDetailPageProps) {
   const { id } = await params;
-  const { supabase: sb } = await getAuthenticatedSupabase();
+  const { user, supabase: sb } = await getAuthenticatedSupabase();
   const supabase = sb!;
 
   const { data: agent } = await supabase
     .from("agents")
-    .select("id, name, health, stage, agent_type, last_seen_at, workspace_id, tags, description, metadata, platform, created_at, updated_at, capabilities, webhook_url, webhook_secret")
+    .select("id, name, health, stage, agent_type, last_seen_at, workspace_id, tags, description, metadata, platform, created_at, updated_at, capabilities, webhook_url, webhook_secret, owner_id")
     .eq("id", id)
     .single();
 
@@ -47,9 +48,20 @@ export default async function AgentDetailPage({ params }: AgentDetailPageProps) 
     notFound();
   }
 
+  let ownerName: string | null = null;
+  if (agent.owner_id) {
+    const { data: ownerData } = await supabase
+      .from("workspace_members")
+      .select("user:user!workspace_members_user_id_fkey(name)")
+      .eq("workspace_id", agent.workspace_id)
+      .eq("user_id", agent.owner_id)
+      .single();
+    ownerName = (ownerData?.user as unknown as { name: string | null } | null)?.name ?? null;
+  }
+
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
-  const [updatesResult, problemsResult, tasksResult, stats] = await Promise.all([
+  const [updatesResult, problemsResult, tasksResult, stats, membershipResult] = await Promise.all([
     supabase
       .from("agent_updates")
       .select("id, agent_id, health, stage, message, details, created_at")
@@ -67,11 +79,18 @@ export default async function AgentDetailPage({ params }: AgentDetailPageProps) 
       .eq("agent_id", id)
       .order("created_at", { ascending: false }),
     getAgentStats(supabase, id),
+    supabase
+      .from("workspace_members")
+      .select("role")
+      .eq("workspace_id", agent.workspace_id)
+      .eq("user_id", user!.id)
+      .single(),
   ]);
 
   const updates = updatesResult.data ?? [];
   const problems = problemsResult.data ?? [];
   const tasks = tasksResult.data ?? [];
+  const userRole = membershipResult.data?.role ?? "member";
 
   // Filter updates from last 7 days for sparkline
   const recentUpdates = updates.filter(
@@ -82,8 +101,15 @@ export default async function AgentDetailPage({ params }: AgentDetailPageProps) 
     <div className="space-y-6">
       <div className="flex items-center gap-4">
         <div className="flex-1">
-          <StatusHeader agent={agent} />
+          <StatusHeader agent={agent} ownerName={ownerName} />
         </div>
+        <AgentDetailActions
+          agentId={agent.id}
+          agentName={agent.name}
+          currentOwnerId={agent.owner_id}
+          workspaceId={agent.workspace_id}
+          userRole={userRole}
+        />
         <div className="hidden sm:block">
           <HealthSparkline updates={recentUpdates} currentHealth={agent.health} />
         </div>

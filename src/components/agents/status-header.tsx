@@ -14,9 +14,10 @@ const healthDotColors: Record<string, string> = {
 
 interface StatusHeaderProps {
   agent: Agent;
+  ownerName?: string | null;
 }
 
-export function StatusHeader({ agent }: StatusHeaderProps) {
+export function StatusHeader({ agent, ownerName }: StatusHeaderProps) {
   return (
     <div className="rounded-lg border border-mac-border bg-mac-white p-5">
       <div className="flex items-start justify-between">
@@ -49,6 +50,11 @@ export function StatusHeader({ agent }: StatusHeaderProps) {
           Last seen: {relativeTime(agent.last_seen_at)}
         </span>
       </div>
+      {ownerName !== undefined && (
+        <p className="mt-2 text-xs text-mac-dark-gray">
+          Operated by: <span className="font-medium text-mac-black">{ownerName ?? "Unassigned"}</span>
+        </p>
+      )}
     </div>
   );
 }

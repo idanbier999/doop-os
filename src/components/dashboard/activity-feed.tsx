@@ -51,6 +51,12 @@ function getActivityDescription(entry: ActivityEntry): string {
       return title ? `commented on '${title}'` : "commented on a task";
     case "agent_registered":
       return "registered";
+    case "agent_owner_reassigned":
+      return "ownership reassigned";
+    case "task_cancelled":
+      return title ? `cancelled '${title}'` : "cancelled a task";
+    case "agent.auto_offline":
+      return "went offline (no heartbeat)";
     default:
       return entry.action.replace(/_/g, " ");
   }

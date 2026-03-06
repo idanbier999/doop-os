@@ -4,8 +4,10 @@ import { redirect } from "next/navigation";
 
 export const metadata: Metadata = { title: "Fleet | Tarely" };
 import { FleetStatsBar } from "@/components/fleet/fleet-stats-bar";
-import { AgentHealthGrid } from "@/components/fleet/agent-health-grid";
+import { FleetPageClient } from "@/components/fleet/fleet-page-client";
 import { ProblemTrendChart } from "@/components/fleet/problem-trend-chart";
+import { getWorkspaceMemberMap } from "@/lib/workspace-members";
+import type { OperatorGroup } from "@/components/fleet/operator-fleet-summary";
 import { TaskThroughputChart } from "@/components/fleet/task-throughput-chart";
 import { ActivityFeed } from "@/components/dashboard/activity-feed";
 import { WelcomeBanner } from "@/components/dashboard/welcome-banner";
@@ -37,7 +39,7 @@ export default async function DashboardOverviewPage() {
 
   const { data: membership } = await supabase
     .from("workspace_members")
-    .select("workspace_id")
+    .select("workspace_id, role")
     .eq("user_id", user.id)
     .limit(1)
     .single();
@@ -58,7 +60,7 @@ export default async function DashboardOverviewPage() {
   // First fetch workspace agent IDs for scoping problems
   const { data: wsAgents } = await supabase
     .from("agents")
-    .select("id, name, health, stage, agent_type, last_seen_at, workspace_id, tags, description, metadata, platform, created_at, updated_at, capabilities, webhook_url, webhook_secret")
+    .select("id, name, health, stage, agent_type, last_seen_at, workspace_id, tags, description, metadata, platform, created_at, updated_at, capabilities, webhook_url, webhook_secret, owner_id")
     .eq("workspace_id", workspaceId);
 
   const agents = wsAgents ?? [];
@@ -90,7 +92,7 @@ export default async function DashboardOverviewPage() {
     agentIds.length > 0
       ? supabase
           .from("problems")
-          .select("severity")
+          .select("severity, agent_id")
           .eq("status", "open")
           .in("agent_id", agentIds)
       : Promise.resolve({ data: [] }),
@@ -230,10 +232,43 @@ export default async function DashboardOverviewPage() {
     });
   }
 
+  // Operator groups for fleet overview
+  const memberMap = await getWorkspaceMemberMap(supabase, workspaceId);
+  const userRole = (membership as { role: string }).role;
+
+  const operatorGroupMap = new Map<string | null, OperatorGroup>();
+  for (const agent of agents) {
+    const key = agent.owner_id;
+    if (!operatorGroupMap.has(key)) {
+      const member = key ? memberMap.get(key) : null;
+      operatorGroupMap.set(key, {
+        operatorId: key,
+        operatorName: member?.name ?? "Unassigned",
+        agentCount: 0,
+        healthBreakdown: { healthy: 0, degraded: 0, critical: 0, offline: 0 },
+        openProblems: 0,
+      });
+    }
+    const group = operatorGroupMap.get(key)!;
+    group.agentCount++;
+    const h = agent.health as keyof typeof group.healthBreakdown;
+    if (h in group.healthBreakdown) group.healthBreakdown[h]++;
+  }
+  for (const p of openProblemsRaw) {
+    const agentId = (p as { agent_id: string | null }).agent_id;
+    const agent = agents.find((a) => a.id === agentId);
+    if (agent) {
+      const group = operatorGroupMap.get(agent.owner_id);
+      if (group) group.openProblems++;
+    }
+  }
+  const operatorGroups = Array.from(operatorGroupMap.values());
+
   return (
     <div className="space-y-4">
       <FleetStatsBar
         initialAgentCounts={agentCounts}
+        initialAgents={agents.map(a => ({ id: a.id, health: a.health, owner_id: a.owner_id }))}
         initialOpenProblems={openProblemsData}
         initialTasksInFlight={tasksInFlight}
         problemsSparkline={problemsSparkline}
@@ -242,10 +277,12 @@ export default async function DashboardOverviewPage() {
         yesterdayTasksInFlight={yesterdayTasksInFlight}
       />
       {!hasAgents && <WelcomeBanner />}
-      <AgentHealthGrid
-        initialAgents={agents}
+      <FleetPageClient
+        agents={agents}
+        operatorGroups={operatorGroups}
         agentCurrentTask={agentCurrentTask}
         agentHealthHistory={agentHealthHistory}
+        userRole={userRole}
       />
       <ActivityFeed
         initialActivity={activity}

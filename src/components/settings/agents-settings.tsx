@@ -13,11 +13,13 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { testWebhook } from "@/app/dashboard/settings/actions";
 import { Fragment } from "react";
 import type { Tables } from "@/lib/database.types";
+import { getWorkspaceMemberMap, type MemberInfo } from "@/lib/workspace-members";
+import { ReassignOwnerModal } from "@/components/agents/reassign-owner-modal";
 
 type Agent = Tables<"agents">;
 
 export function AgentsSettings() {
-  const { workspaceId } = useWorkspace();
+  const { workspaceId, userId, userRole } = useWorkspace();
   const supabase = useSupabase();
   const { addToast } = useNotifications();
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -34,6 +36,11 @@ export function AgentsSettings() {
   const [revealedSecrets, setRevealedSecrets] = useState<Set<string>>(new Set());
   const [expandedWebhook, setExpandedWebhook] = useState<Set<string>>(new Set());
   const [testingWebhook, setTestingWebhook] = useState<Set<string>>(new Set());
+  const [memberMap, setMemberMap] = useState<Map<string, MemberInfo>>(new Map());
+  const [reassignTarget, setReassignTarget] = useState<Agent | null>(null);
+
+  const isAdminOrOwner = userRole === "owner" || userRole === "admin";
+  const canEdit = (agent: Agent) => isAdminOrOwner || agent.owner_id === userId;
 
   const loadAgents = useCallback(async () => {
     const { data } = await supabase
@@ -43,6 +50,8 @@ export function AgentsSettings() {
       .order("name");
 
     setAgents(data || []);
+    const map = await getWorkspaceMemberMap(supabase, workspaceId);
+    setMemberMap(map);
     setLoading(false);
   }, [workspaceId, supabase]);
 
@@ -215,6 +224,7 @@ export function AgentsSettings() {
                 <Tr>
                   <Th>Name</Th>
                   <Th>Type</Th>
+                  <Th>Owner</Th>
                   <Th>Health</Th>
                   <Th>Tags</Th>
                   <Th>API Key</Th>
@@ -232,6 +242,7 @@ export function AgentsSettings() {
                         </span>
                       </Td>
                       <Td>{agent.agent_type || "-"}</Td>
+                      <Td>{agent.owner_id ? memberMap.get(agent.owner_id)?.name ?? "Unknown" : "Unassigned"}</Td>
                       <Td>
                         <Badge variant="health" value={agent.health} />
                       </Td>
@@ -270,6 +281,7 @@ export function AgentsSettings() {
                             <Button
                               variant="ghost"
                               size="sm"
+                              disabled={!canEdit(agent)}
                               onClick={() => {
                                 setEditingTags(agent.id);
                                 setTagInput(agent.tags?.join(", ") || "");
@@ -310,18 +322,31 @@ export function AgentsSettings() {
                         </Button>
                       </Td>
                       <Td>
-                        <Button
-                          variant="danger"
-                          size="sm"
-                          onClick={() => setDeleteTarget(agent)}
-                        >
-                          Delete
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          {isAdminOrOwner && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setReassignTarget(agent)}
+                            >
+                              Reassign
+                            </Button>
+                          )}
+                          {canEdit(agent) && (
+                            <Button
+                              variant="danger"
+                              size="sm"
+                              onClick={() => setDeleteTarget(agent)}
+                            >
+                              Delete
+                            </Button>
+                          )}
+                        </div>
                       </Td>
                     </Tr>
                     {expandedWebhook.has(agent.id) && (
                       <Tr>
-                        <Td colSpan={7}>
+                        <Td colSpan={8}>
                           <div className="bg-mac-light-gray border border-mac-border rounded-[2px] p-4 space-y-4">
                             {/* Webhook URL */}
                             <div>
@@ -360,6 +385,7 @@ export function AgentsSettings() {
                                   <Button
                                     variant="ghost"
                                     size="sm"
+                                    disabled={!canEdit(agent)}
                                     onClick={() => {
                                       setEditingWebhook(agent.id);
                                       setWebhookInput(agent.webhook_url || "");
@@ -461,6 +487,7 @@ export function AgentsSettings() {
                                   <Button
                                     variant="ghost"
                                     size="sm"
+                                    disabled={!canEdit(agent)}
                                     onClick={() => {
                                       setEditingCapabilities(agent.id);
                                       setCapabilitiesInput(agent.capabilities?.join(", ") || "");
@@ -514,6 +541,15 @@ export function AgentsSettings() {
           </div>
         </div>
       </Modal>
+
+      <ReassignOwnerModal
+        open={!!reassignTarget}
+        onClose={() => { setReassignTarget(null); loadAgents(); }}
+        agentId={reassignTarget?.id ?? ""}
+        agentName={reassignTarget?.name ?? ""}
+        currentOwnerId={reassignTarget?.owner_id ?? null}
+        workspaceId={workspaceId}
+      />
     </>
   );
 }

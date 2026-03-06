@@ -18,6 +18,8 @@ vi.mock("@/contexts/workspace-context", async () => {
       workspaceId: "ws-001",
       userId: "user-001",
       userRole: "owner",
+      fleetScope: "mine",
+      setFleetScope: vi.fn(),
     })),
   };
 });

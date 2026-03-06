@@ -23,7 +23,7 @@ export default async function ProblemsPage() {
   // Fetch workspace-scoped agents first
   const agentsResult = await supabase
     .from("agents")
-    .select("id, name")
+    .select("id, name, owner_id")
     .eq("workspace_id", workspaceId);
 
   const agents = agentsResult.data ?? [];

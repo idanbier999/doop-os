@@ -7,6 +7,7 @@ import { useRealtime } from "@/hooks/use-realtime";
 import { AgentCard } from "@/components/dashboard/agent-card";
 import { TagFilter } from "./tag-filter";
 import { EmptyState } from "@/components/ui/empty-state";
+import { useFleetScopeFilter } from "@/hooks/use-fleet-scope-filter";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { createAgent } from "@/app/dashboard/agents/actions";
@@ -17,12 +18,14 @@ type Agent = Omit<Tables<"agents">, "api_key">;
 interface AgentsPageClientProps {
   initialAgents: Agent[];
   agentStats?: Record<string, { completionRate: number; openProblems: number }>;
+  ownerNames?: Record<string, string>;
 }
 
-export function AgentsPageClient({ initialAgents, agentStats }: AgentsPageClientProps) {
+export function AgentsPageClient({ initialAgents, agentStats, ownerNames }: AgentsPageClientProps) {
   const { workspaceId } = useWorkspace();
   const router = useRouter();
   const [agents, setAgents] = useState<Agent[]>(initialAgents);
+  const scopedAgents = useFleetScopeFilter(agents);
   const [stageFilter, setStageFilter] = useState("");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [connectModalOpen, setConnectModalOpen] = useState(false);
@@ -150,25 +153,25 @@ export function AgentsPageClient({ initialAgents, agentStats }: AgentsPageClient
 
   const availableTags = useMemo(() => {
     const tagSet = new Set<string>();
-    agents.forEach(a => a.tags?.forEach(t => tagSet.add(t)));
+    scopedAgents.forEach(a => a.tags?.forEach(t => tagSet.add(t)));
     return Array.from(tagSet).sort();
-  }, [agents]);
+  }, [scopedAgents]);
 
   const stages = useMemo(() => {
     const stageSet = new Set<string>();
-    agents.forEach(a => stageSet.add(a.stage));
+    scopedAgents.forEach(a => stageSet.add(a.stage));
     return Array.from(stageSet).sort();
-  }, [agents]);
+  }, [scopedAgents]);
 
   const filteredAgents = useMemo(() => {
-    return agents.filter(a => {
+    return scopedAgents.filter(a => {
       if (stageFilter && a.stage !== stageFilter) return false;
       if (selectedTags.length > 0) {
         if (!a.tags || !selectedTags.some(t => a.tags!.includes(t))) return false;
       }
       return true;
     });
-  }, [agents, stageFilter, selectedTags]);
+  }, [scopedAgents, stageFilter, selectedTags]);
 
   return (
     <div className="space-y-6">
@@ -201,18 +204,22 @@ export function AgentsPageClient({ initialAgents, agentStats }: AgentsPageClient
         />
       </div>
 
-      {filteredAgents.length === 0 ? (
+      {agents.length === 0 ? (
         <EmptyState
           message="No agents found"
-          description={
-            agents.length === 0
-              ? "No agents registered yet. Agents connect via MCP."
-              : "No agents match the current filters."
-          }
-          {...(agents.length === 0 && {
-            actionLabel: "Connect Agent",
-            onAction: () => setConnectModalOpen(true),
-          })}
+          description="No agents registered yet. Agents connect via MCP."
+          actionLabel="Connect Agent"
+          onAction={() => setConnectModalOpen(true)}
+        />
+      ) : scopedAgents.length === 0 ? (
+        <EmptyState
+          message="No agents in your fleet"
+          description="Switch to All Fleet or connect a new agent."
+        />
+      ) : filteredAgents.length === 0 ? (
+        <EmptyState
+          message="No agents match the current filters"
+          description="Try adjusting your filters."
         />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -222,6 +229,7 @@ export function AgentsPageClient({ initialAgents, agentStats }: AgentsPageClient
               agent={agent}
               completionRate={agentStats?.[agent.id]?.completionRate}
               openProblems={agentStats?.[agent.id]?.openProblems}
+              ownerName={ownerNames?.[agent.id]}
             />
           ))}
         </div>

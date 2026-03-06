@@ -217,6 +217,7 @@ export type Database = {
           last_seen_at: string | null
           metadata: Json | null
           name: string
+          owner_id: string | null
           platform: string | null
           stage: string
           tags: string[] | null
@@ -236,6 +237,7 @@ export type Database = {
           last_seen_at?: string | null
           metadata?: Json | null
           name: string
+          owner_id?: string | null
           platform?: string | null
           stage?: string
           tags?: string[] | null
@@ -255,6 +257,7 @@ export type Database = {
           last_seen_at?: string | null
           metadata?: Json | null
           name?: string
+          owner_id?: string | null
           platform?: string | null
           stage?: string
           tags?: string[] | null
@@ -269,6 +272,13 @@ export type Database = {
             columns: ["workspace_id"]
             isOneToOne: false
             referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agents_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "user"
             referencedColumns: ["id"]
           },
         ]

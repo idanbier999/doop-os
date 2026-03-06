@@ -14,7 +14,7 @@ export default async function ActivityPage() {
       .select("id, action, details, created_at, agent_id, user_id, workspace_id, agents(name)")
       .order("created_at", { ascending: false })
       .limit(200),
-    supabase.from("agents").select("id, name").order("name"),
+    supabase.from("agents").select("id, name, owner_id").order("name"),
   ]);
 
   return (

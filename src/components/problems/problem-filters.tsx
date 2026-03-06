@@ -4,7 +4,7 @@ import { Select } from "@/components/ui/select";
 import { DateRange } from "@/components/ui/date-range";
 
 interface ProblemFiltersProps {
-  agents: { id: string; name: string }[];
+  agents: { id: string; name: string; owner_id?: string | null }[];
   severity: string;
   agentId: string;
   status: string;

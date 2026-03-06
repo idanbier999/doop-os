@@ -19,9 +19,10 @@ interface AgentCardProps {
   agent: Agent;
   completionRate?: number;
   openProblems?: number;
+  ownerName?: string | null;
 }
 
-export function AgentCard({ agent, completionRate, openProblems }: AgentCardProps) {
+export function AgentCard({ agent, completionRate, openProblems, ownerName }: AgentCardProps) {
   return (
     <Link
       href={`/dashboard/agents/${agent.id}`}
@@ -43,6 +44,9 @@ export function AgentCard({ agent, completionRate, openProblems }: AgentCardProp
           {relativeTime(agent.last_seen_at)}
         </span>
       </div>
+      {ownerName && (
+        <span className="text-xs text-mac-gray truncate">{ownerName}</span>
+      )}
       {(completionRate !== undefined || (openProblems !== undefined && openProblems > 0)) && (
         <div className="mt-2 flex items-center gap-3 text-xs">
           {completionRate !== undefined && (

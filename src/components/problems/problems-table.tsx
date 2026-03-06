@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useMemo } from "react";
+import { useOwnedAgentIds } from "@/hooks/use-fleet-scope-filter";
 import { useRealtime } from "@/hooks/use-realtime";
 import { Table, Thead, Tbody, Tr, Th, Td } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -25,7 +26,7 @@ type ProblemWithAgent = {
 
 interface ProblemsTableProps {
   initialProblems: ProblemWithAgent[];
-  agents: { id: string; name: string }[];
+  agents: { id: string; name: string; owner_id?: string | null }[];
 }
 
 export function ProblemsTable({
@@ -40,6 +41,12 @@ export function ProblemsTable({
   const [taskFilter, setTaskFilter] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+
+  const ownedAgentIds = useOwnedAgentIds(agents);
+  const scopedAgents = useMemo(() =>
+    agents.filter(a => ownedAgentIds.has(a.id)),
+    [agents, ownedAgentIds]
+  );
 
   type SortField = "created_at" | "severity";
   type SortDir = "asc" | "desc";
@@ -95,6 +102,7 @@ export function ProblemsTable({
 
   const filtered = useMemo(() => {
     const result = problems.filter((p) => {
+      if (!ownedAgentIds.has(p.agent_id)) return false;
       if (severityFilter !== "all" && p.severity !== severityFilter) return false;
       if (agentFilter !== "all" && p.agent_id !== agentFilter) return false;
       if (statusFilter !== "all" && p.status !== statusFilter) return false;
@@ -122,12 +130,12 @@ export function ProblemsTable({
     });
 
     return result;
-  }, [problems, severityFilter, agentFilter, statusFilter, taskFilter, dateFrom, dateTo, sortField, sortDir]);
+  }, [problems, severityFilter, agentFilter, statusFilter, taskFilter, dateFrom, dateTo, sortField, sortDir, ownedAgentIds]);
 
   return (
     <div className="space-y-4">
       <ProblemFilters
-        agents={agents}
+        agents={scopedAgents}
         severity={severityFilter}
         agentId={agentFilter}
         status={statusFilter}

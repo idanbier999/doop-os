@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { LineChart, Line } from "recharts";
 import { Card } from "@/components/ui/card";
 import { useRealtime } from "@/hooks/use-realtime";
@@ -15,6 +15,7 @@ interface FleetStatsBarProps {
     critical: number;
     offline: number;
   };
+  initialAgents: Array<{ id: string; health: string; owner_id: string | null }>;
   initialOpenProblems: { total: number; critical: number };
   initialTasksInFlight: number;
   problemsSparkline: Array<{ value: number }>;
@@ -67,6 +68,7 @@ function DeltaIndicator({
 
 export function FleetStatsBar({
   initialAgentCounts,
+  initialAgents,
   initialOpenProblems,
   initialTasksInFlight,
   problemsSparkline,
@@ -74,44 +76,48 @@ export function FleetStatsBar({
   yesterdayOpenProblems,
   yesterdayTasksInFlight,
 }: FleetStatsBarProps) {
-  const { workspaceId } = useWorkspace();
+  const { workspaceId, fleetScope, userId } = useWorkspace();
   const supabase = useSupabase();
-  const [agentCounts, setAgentCounts] = useState(initialAgentCounts);
+  const [rawAgents, setRawAgents] = useState(initialAgents);
   const [openProblems, setOpenProblems] = useState(initialOpenProblems);
   const [tasksInFlight, setTasksInFlight] = useState(initialTasksInFlight);
+
+  const agentCounts = useMemo(() => {
+    const scoped = fleetScope === "all" ? rawAgents : rawAgents.filter(a => a.owner_id === userId);
+    const counts = { total: scoped.length, healthy: 0, degraded: 0, critical: 0, offline: 0 };
+    for (const a of scoped) {
+      const h = a.health as keyof typeof counts;
+      if (h in counts && h !== "total") counts[h]++;
+    }
+    return counts;
+  }, [rawAgents, fleetScope, userId]);
+
+  const scopedAgentIds = useMemo(() => {
+    const scoped = fleetScope === "all" ? rawAgents : rawAgents.filter(a => a.owner_id === userId);
+    return scoped.map(a => a.id);
+  }, [rawAgents, fleetScope, userId]);
 
   const refetchAgentCounts = useCallback(async () => {
     const { data } = await supabase
       .from("agents")
-      .select("health")
+      .select("id, health, owner_id")
       .eq("workspace_id", workspaceId);
 
     if (data) {
-      const counts = { total: data.length, healthy: 0, degraded: 0, critical: 0, offline: 0 };
-      for (const agent of data) {
-        const h = agent.health as keyof typeof counts;
-        if (h in counts && h !== "total") {
-          counts[h]++;
-        }
-      }
-      setAgentCounts(counts);
+      setRawAgents(data);
     }
   }, [workspaceId, supabase]);
 
   const refetchProblems = useCallback(async () => {
+    if (scopedAgentIds.length === 0) {
+      setOpenProblems({ total: 0, critical: 0 });
+      return;
+    }
     const { data } = await supabase
       .from("problems")
-      .select("severity, agent_id, status")
+      .select("severity")
       .eq("status", "open")
-      .in(
-        "agent_id",
-        (
-          await supabase
-            .from("agents")
-            .select("id")
-            .eq("workspace_id", workspaceId)
-        ).data?.map((a) => a.id) ?? []
-      );
+      .in("agent_id", scopedAgentIds);
 
     if (data) {
       setOpenProblems({
@@ -119,17 +125,21 @@ export function FleetStatsBar({
         critical: data.filter((p) => p.severity === "critical").length,
       });
     }
-  }, [workspaceId, supabase]);
+  }, [scopedAgentIds, supabase]);
 
   const refetchTasks = useCallback(async () => {
+    if (scopedAgentIds.length === 0) {
+      setTasksInFlight(0);
+      return;
+    }
     const { count } = await supabase
       .from("tasks")
       .select("*", { count: "exact", head: true })
-      .eq("workspace_id", workspaceId)
+      .in("agent_id", scopedAgentIds)
       .in("status", ["in_progress", "waiting_on_agent", "waiting_on_human"]);
 
     setTasksInFlight(count ?? 0);
-  }, [workspaceId, supabase]);
+  }, [scopedAgentIds, supabase]);
 
   useRealtime({ table: "agents", onPayload: refetchAgentCounts });
   useRealtime({ table: "problems", onPayload: refetchProblems });

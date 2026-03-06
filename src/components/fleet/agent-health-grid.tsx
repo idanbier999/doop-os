@@ -9,6 +9,7 @@ import { HealthSparkline } from "@/components/agents/health-sparkline";
 import { useRealtime } from "@/hooks/use-realtime";
 import { useSupabase } from "@/hooks/use-supabase";
 import { useWorkspace } from "@/contexts/workspace-context";
+import { useFleetScopeFilter } from "@/hooks/use-fleet-scope-filter";
 import { relativeTime } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/empty-state";
 import type { Tables } from "@/lib/database.types";
@@ -109,6 +110,8 @@ export function AgentHealthGrid({
   useRealtime({ table: "agents", onPayload: handleRealtimeChange });
   useRealtime({ table: "tasks", onPayload: refetchCurrentTasks });
 
+  const scopedAgents = useFleetScopeFilter(agents);
+
   if (agents.length === 0) {
     return (
       <Card title="Agent Fleet">
@@ -122,7 +125,18 @@ export function AgentHealthGrid({
     );
   }
 
-  const sorted = sortAgents(agents);
+  if (scopedAgents.length === 0) {
+    return (
+      <Card title="Agent Fleet">
+        <EmptyState
+          message="No agents in your fleet"
+          description="Switch to All Fleet to see all workspace agents."
+        />
+      </Card>
+    );
+  }
+
+  const sorted = sortAgents(scopedAgents);
 
   return (
     <Card title="Agent Fleet">

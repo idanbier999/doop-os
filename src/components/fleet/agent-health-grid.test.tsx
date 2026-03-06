@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { AgentHealthGrid } from "@/components/fleet/agent-health-grid";
+import { useWorkspace } from "@/contexts/workspace-context";
 
 vi.mock("@/hooks/use-realtime", () => ({
   useRealtime: vi.fn(),
@@ -20,6 +21,8 @@ vi.mock("@/contexts/workspace-context", () => ({
     workspaceId: "ws-001",
     userId: "user-001",
     userRole: "owner",
+    fleetScope: "all",
+    setFleetScope: vi.fn(),
   })),
 }));
 
@@ -64,11 +67,27 @@ function makeAgent(overrides: Record<string, unknown>) {
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     metadata: null,
+    owner_id: "user-001",
     ...overrides,
   };
 }
 
+function setScope(scope: "all" | "mine") {
+  vi.mocked(useWorkspace).mockReturnValue({
+    workspaceId: "ws-001",
+    userId: "user-001",
+    userRole: "owner",
+    fleetScope: scope,
+    setFleetScope: vi.fn(),
+  } as any);
+}
+
 describe("AgentHealthGrid", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setScope("all");
+  });
+
   it("renders empty state message when no agents", () => {
     render(
       <AgentHealthGrid
@@ -151,5 +170,64 @@ describe("AgentHealthGrid", () => {
     );
 
     expect(screen.getByText("Idle")).toBeInTheDocument();
+  });
+
+  it("filters to only owned agents when scope is mine", () => {
+    setScope("mine");
+    const agents = [
+      makeAgent({ id: "a-1", name: "My Agent", owner_id: "user-001" }),
+      makeAgent({ id: "a-2", name: "Other Agent", owner_id: "user-002" }),
+      makeAgent({ id: "a-3", name: "Also Mine", owner_id: "user-001" }),
+    ];
+
+    render(
+      <AgentHealthGrid
+        initialAgents={agents as any}
+        agentCurrentTask={{}}
+        agentHealthHistory={{}}
+      />
+    );
+
+    expect(screen.getByText("My Agent")).toBeInTheDocument();
+    expect(screen.getByText("Also Mine")).toBeInTheDocument();
+    expect(screen.queryByText("Other Agent")).not.toBeInTheDocument();
+  });
+
+  it("shows all agents when scope is all", () => {
+    setScope("all");
+    const agents = [
+      makeAgent({ id: "a-1", name: "My Agent", owner_id: "user-001" }),
+      makeAgent({ id: "a-2", name: "Other Agent", owner_id: "user-002" }),
+    ];
+
+    render(
+      <AgentHealthGrid
+        initialAgents={agents as any}
+        agentCurrentTask={{}}
+        agentHealthHistory={{}}
+      />
+    );
+
+    expect(screen.getByText("My Agent")).toBeInTheDocument();
+    expect(screen.getByText("Other Agent")).toBeInTheDocument();
+  });
+
+  it("shows empty state when no owned agents in mine scope", () => {
+    setScope("mine");
+    const agents = [
+      makeAgent({ id: "a-1", name: "Other Agent", owner_id: "user-002" }),
+      makeAgent({ id: "a-2", name: "Another Other", owner_id: "user-003" }),
+    ];
+
+    render(
+      <AgentHealthGrid
+        initialAgents={agents as any}
+        agentCurrentTask={{}}
+        agentHealthHistory={{}}
+      />
+    );
+
+    expect(screen.queryByText("Other Agent")).not.toBeInTheDocument();
+    expect(screen.getByText("No agents in your fleet")).toBeInTheDocument();
   });
 });

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useMemo } from "react";
+import { useOwnedAgentIds } from "@/hooks/use-fleet-scope-filter";
 import { useWorkspace } from "@/contexts/workspace-context";
 import { useNotifications } from "@/contexts/notification-context";
 import { useRealtime } from "@/hooks/use-realtime";
@@ -17,7 +18,7 @@ type ActivityEntry = Tables<"activity_log"> & {
 
 interface ActivityTimelineProps {
   initialEntries: ActivityEntry[];
-  agents: { id: string; name: string }[];
+  agents: { id: string; name: string; owner_id?: string | null }[];
 }
 
 export function ActivityTimeline({
@@ -27,6 +28,11 @@ export function ActivityTimeline({
   const { workspaceId } = useWorkspace();
   const { addToast } = useNotifications();
   const [entries, setEntries] = useState<ActivityEntry[]>(initialEntries);
+  const ownedAgentIds = useOwnedAgentIds(agents);
+  const scopedAgents = useMemo(() =>
+    agents.filter(a => ownedAgentIds.has(a.id)),
+    [agents, ownedAgentIds]
+  );
   const [selectedAgent, setSelectedAgent] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("");
   const [dateFrom, setDateFrom] = useState("");
@@ -52,6 +58,7 @@ export function ActivityTimeline({
 
   const filtered = useMemo(() => {
     return entries.filter((entry) => {
+      if (entry.agent_id && !ownedAgentIds.has(entry.agent_id)) return false;
       if (selectedAgent && entry.agent_id !== selectedAgent) return false;
 
       // Category-based action filtering
@@ -74,7 +81,7 @@ export function ActivityTimeline({
       }
       return true;
     });
-  }, [entries, selectedAgent, selectedCategory, dateFrom, dateTo]);
+  }, [entries, selectedAgent, selectedCategory, dateFrom, dateTo, ownedAgentIds]);
 
   // --- Export handlers ---
 
@@ -123,7 +130,7 @@ export function ActivityTimeline({
   return (
     <div className="space-y-4">
       <ActivityFilters
-        agents={agents}
+        agents={scopedAgents}
         selectedAgent={selectedAgent}
         onAgentChange={setSelectedAgent}
         selectedCategory={selectedCategory}

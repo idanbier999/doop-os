@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { authClient } from "@/lib/auth-client";
 import { useMobileSidebar } from "@/contexts/mobile-sidebar-context";
+import { useWorkspace } from "@/contexts/workspace-context";
 
 const navItems = [
   { label: "Fleet", href: "/dashboard", icon: "▣" },
@@ -25,6 +26,7 @@ export function Sidebar({ userEmail, workspaceName }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { isOpen, close } = useMobileSidebar();
+  const { fleetScope, setFleetScope } = useWorkspace();
 
   // Close mobile sidebar on route change
   useEffect(() => {
@@ -87,6 +89,32 @@ export function Sidebar({ userEmail, workspaceName }: SidebarProps) {
             </Link>
           ))}
         </nav>
+
+        {/* Fleet Scope Toggle */}
+        <div className="px-2 py-2 border-t border-mac-border">
+          <div className="flex rounded-[2px] border border-mac-border overflow-hidden">
+            <button
+              onClick={() => setFleetScope("mine")}
+              className={`flex-1 px-2 py-1 text-xs font-[family-name:var(--font-pixel)] transition-colors ${
+                fleetScope === "mine"
+                  ? "bg-mac-highlight text-mac-highlight-text"
+                  : "bg-mac-white text-mac-black hover:bg-mac-highlight-soft"
+              }`}
+            >
+              My Fleet
+            </button>
+            <button
+              onClick={() => setFleetScope("all")}
+              className={`flex-1 px-2 py-1 text-xs font-[family-name:var(--font-pixel)] transition-colors ${
+                fleetScope === "all"
+                  ? "bg-mac-highlight text-mac-highlight-text"
+                  : "bg-mac-white text-mac-black hover:bg-mac-highlight-soft"
+              }`}
+            >
+              All Fleet
+            </button>
+          </div>
+        </div>
 
         {/* Footer */}
         <div className="px-2 py-3 border-t border-mac-border space-y-1">

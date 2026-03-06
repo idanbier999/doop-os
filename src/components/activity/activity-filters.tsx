@@ -10,6 +10,7 @@ export { CATEGORY_ACTIONS }
 interface Agent {
   id: string;
   name: string;
+  owner_id?: string | null;
 }
 
 interface ActivityFiltersProps {
