@@ -15,6 +15,11 @@ export const auth = betterAuth({
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
     },
   },
+  trustedOrigins: [
+    "https://beta.tarely.xyz",
+    "https://tarely.xyz",
+    "https://tarely-dashboard.vercel.app",
+  ],
   advanced: {
     database: {
       generateId: () => crypto.randomUUID(),
