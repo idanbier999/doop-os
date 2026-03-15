@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
-import { createMockSupabaseClient, mockResolve, mockReject } from "@/__tests__/mocks/supabase";
+import {
+  createMockSupabaseClient,
+  createTableMocks,
+  mockResolve,
+  mockReject,
+} from "@/__tests__/mocks/supabase";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -115,6 +120,8 @@ describe("GET /api/v1/tasks", () => {
     expect(mockSupabase.chain.limit).toHaveBeenCalledWith(100);
   });
 
+  // Tests the task_agents junction query — resolves to [] so it returns early,
+  // but confirms eq("agent_id", ...) is called on the task_agents chain.
   it("filters by assigned_to=me using agent.id", async () => {
     mockResolve(mockSupabase.chain, []);
 
@@ -126,6 +133,66 @@ describe("GET /api/v1/tasks", () => {
     await GET(request);
 
     expect(mockSupabase.chain.eq).toHaveBeenCalledWith("agent_id", "agent-001");
+  });
+
+  it("supports comma-separated status param", async () => {
+    mockResolve(mockSupabase.chain, []);
+
+    const request = new NextRequest("http://localhost/api/v1/tasks?status=pending,in_progress", {
+      method: "GET",
+      headers: { Authorization: "Bearer test-key" },
+    });
+
+    await GET(request);
+
+    expect(mockSupabase.chain.in).toHaveBeenCalledWith("status", ["pending", "in_progress"]);
+  });
+
+  it("queries task_agents junction table when assigned_to=me", async () => {
+    const taskAgentsChain = createMockSupabaseClient().chain;
+    mockResolve(taskAgentsChain, [{ task_id: "t-1", role: "assignee" }]);
+
+    const tasksChain = createMockSupabaseClient().chain;
+    mockResolve(tasksChain, [
+      { id: "t-1", title: "Task 1", status: "pending", priority: "high", created_at: "2026-01-01" },
+    ]);
+
+    createTableMocks(mockSupabase.from, {
+      task_agents: taskAgentsChain,
+      tasks: tasksChain,
+    });
+
+    const request = new NextRequest("http://localhost/api/v1/tasks?assigned_to=me", {
+      method: "GET",
+      headers: { Authorization: "Bearer test-key" },
+    });
+
+    const response = await GET(request);
+    const json = await response.json();
+
+    expect(mockSupabase.from).toHaveBeenCalledWith("task_agents");
+    expect(json.tasks).toHaveLength(1);
+    expect(json.tasks[0].role).toBe("assignee");
+  });
+
+  it("returns empty tasks when assigned_to=me and no assignments", async () => {
+    const taskAgentsChain = createMockSupabaseClient().chain;
+    mockResolve(taskAgentsChain, []);
+
+    createTableMocks(mockSupabase.from, {
+      task_agents: taskAgentsChain,
+    });
+
+    const request = new NextRequest("http://localhost/api/v1/tasks?assigned_to=me", {
+      method: "GET",
+      headers: { Authorization: "Bearer test-key" },
+    });
+
+    const response = await GET(request);
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.tasks).toEqual([]);
   });
 
   it("returns 500 on query error", async () => {

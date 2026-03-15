@@ -82,10 +82,34 @@ async function handleGet(request: NextRequest, context?: unknown) {
     .select("id, file_name, file_path, mime_type, file_size")
     .eq("project_id", id);
 
+  // Generate signed URLs for files
+  const filesWithUrls = await Promise.all(
+    (files ?? []).map(
+      async (file: {
+        id: string;
+        file_name: string;
+        file_path: string;
+        mime_type: string | null;
+        file_size: number | null;
+      }) => {
+        let signed_url: string | null = null;
+        try {
+          const { data: signedData } = await supabase.storage
+            .from("project-files")
+            .createSignedUrl(file.file_path, 3600);
+          signed_url = signedData?.signedUrl ?? null;
+        } catch {
+          // Don't block response if signing fails
+        }
+        return { ...file, signed_url };
+      }
+    )
+  );
+
   return NextResponse.json({
     project,
     team,
-    files: files ?? [],
+    files: filesWithUrls,
     agent_role: membership.role,
   });
 }

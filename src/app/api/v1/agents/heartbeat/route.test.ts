@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
-import { createMockSupabaseClient, mockResolve, mockReject } from "@/__tests__/mocks/supabase";
+import {
+  createMockSupabaseClient,
+  createTableMocks,
+  mockResolve,
+  mockReject,
+} from "@/__tests__/mocks/supabase";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -297,6 +302,117 @@ describe("POST /api/v1/agents/heartbeat", () => {
 
     expect(response.status).toBe(200);
     expect(json.ok).toBe(true);
+  });
+
+  it("inserts agent_updates when stage/health/message provided", async () => {
+    const agentsChain = createMockSupabaseClient().chain;
+    const agentUpdatesChain = createMockSupabaseClient().chain;
+    const activityChain = createMockSupabaseClient().chain;
+
+    createTableMocks(mockSupabase.from, {
+      agents: agentsChain,
+      agent_updates: agentUpdatesChain,
+      activity_log: activityChain,
+    });
+
+    const request = new NextRequest("http://localhost/api/v1/agents/heartbeat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer test-key",
+      },
+      body: JSON.stringify({ stage: "running", message: "working on it" }),
+    });
+
+    await POST(request);
+
+    expect(mockSupabase.from).toHaveBeenCalledWith("agent_updates");
+    expect(agentUpdatesChain.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agent_id: "agent-001",
+        stage: "running",
+        health: "healthy",
+        message: "working on it",
+      })
+    );
+  });
+
+  it("inserts activity_log with status_update action", async () => {
+    const agentsChain = createMockSupabaseClient().chain;
+    const agentUpdatesChain = createMockSupabaseClient().chain;
+    const activityChain = createMockSupabaseClient().chain;
+
+    createTableMocks(mockSupabase.from, {
+      agents: agentsChain,
+      agent_updates: agentUpdatesChain,
+      activity_log: activityChain,
+    });
+
+    const request = new NextRequest("http://localhost/api/v1/agents/heartbeat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer test-key",
+      },
+      body: JSON.stringify({ stage: "blocked", health: "degraded", message: "waiting for input" }),
+    });
+
+    await POST(request);
+
+    expect(mockSupabase.from).toHaveBeenCalledWith("activity_log");
+    expect(activityChain.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspace_id: "ws-001",
+        agent_id: "agent-001",
+        action: "status_update",
+        details: expect.objectContaining({
+          stage: "blocked",
+          health: "degraded",
+          message: "waiting for input",
+        }),
+      })
+    );
+  });
+
+  it("uses provided health value instead of default 'healthy'", async () => {
+    const agentsChain = createMockSupabaseClient().chain;
+    const agentUpdatesChain = createMockSupabaseClient().chain;
+    const activityChain = createMockSupabaseClient().chain;
+
+    createTableMocks(mockSupabase.from, {
+      agents: agentsChain,
+      agent_updates: agentUpdatesChain,
+      activity_log: activityChain,
+    });
+
+    const request = new NextRequest("http://localhost/api/v1/agents/heartbeat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer test-key",
+      },
+      body: JSON.stringify({ health: "degraded" }),
+    });
+
+    await POST(request);
+
+    expect(agentsChain.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        health: "degraded",
+      })
+    );
+  });
+
+  it("does not insert agent_updates for bare heartbeat", async () => {
+    const request = new NextRequest("http://localhost/api/v1/agents/heartbeat", {
+      method: "POST",
+      headers: { Authorization: "Bearer test-key" },
+    });
+
+    await POST(request);
+
+    const fromCalls = mockSupabase.from.mock.calls.map((c: unknown[]) => c[0]);
+    expect(fromCalls).not.toContain("agent_updates");
   });
 
   it("returns 500 on update error", async () => {

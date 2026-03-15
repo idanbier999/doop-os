@@ -7,8 +7,10 @@ import type { Json } from "@/lib/database.types";
 
 const heartbeatBodySchema = z
   .object({
-    // status is validated but not persisted yet — reserved for future use
     status: z.string().max(50).optional(),
+    stage: z.enum(["idle", "running", "blocked", "completed", "error"]).optional(),
+    health: z.enum(["healthy", "degraded", "critical", "offline"]).optional(),
+    message: z.string().max(500).optional(),
     version: z.string().max(100).optional(),
     meta: z.record(z.string(), z.unknown()).optional(),
   })
@@ -55,17 +57,43 @@ async function handlePost(request: NextRequest) {
     mergedMetadata = { ...prev, ...metadataPatch } as Json;
   }
 
-  const { error } = await supabase
-    .from("agents")
-    .update({
-      last_seen_at: new Date().toISOString(),
-      health: "healthy",
-      ...(mergedMetadata !== undefined ? { metadata: mergedMetadata } : {}),
-    })
-    .eq("id", agent.id);
+  // Use provided health/stage or default to "healthy"
+  const healthValue = body.health ?? "healthy";
+  const hasStatusUpdate = body.stage || body.health || body.message;
+
+  const agentUpdate: Record<string, unknown> = {
+    last_seen_at: new Date().toISOString(),
+    health: healthValue,
+    ...(body.stage ? { stage: body.stage } : {}),
+    ...(mergedMetadata !== undefined ? { metadata: mergedMetadata } : {}),
+  };
+
+  const { error } = await supabase.from("agents").update(agentUpdate).eq("id", agent.id);
 
   if (error) {
     return NextResponse.json({ error: "Failed to update heartbeat" }, { status: 500 });
+  }
+
+  // If stage/health/message provided, record in agent_updates and activity_log
+  if (hasStatusUpdate) {
+    await supabase.from("agent_updates").insert({
+      agent_id: agent.id,
+      stage: body.stage ?? null,
+      health: healthValue,
+      message: body.message ?? null,
+      details: (body.meta as Json) ?? null,
+    });
+
+    await supabase.from("activity_log").insert({
+      workspace_id: agent.workspace_id,
+      agent_id: agent.id,
+      action: "status_update",
+      details: {
+        stage: body.stage ?? null,
+        health: healthValue,
+        message: body.message ?? null,
+      } as unknown as Json,
+    });
   }
 
   return NextResponse.json({ ok: true });

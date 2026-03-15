@@ -123,15 +123,28 @@ Test the webhook right from the settings page. Notifications fire on new high/cr
 
 ### Agent API
 
-Agents integrate through a simple REST API:
+Agents integrate through a REST API or the MCP server:
 
-| Endpoint                     | Method | Description                                      |
-| ---------------------------- | ------ | ------------------------------------------------ |
-| `/api/v1/agents/heartbeat`   | POST   | Send heartbeat, update health and metadata       |
-| `/api/v1/tasks`              | GET    | Poll for pending tasks (queue-based agents)      |
-| `/api/v1/tasks/:id/complete` | POST   | Mark task completed with optional result payload |
+**REST API** (recommended) — works with any tool or language:
+
+| Endpoint                     | Method | Description                                                 |
+| ---------------------------- | ------ | ----------------------------------------------------------- |
+| `/api/v1/agents/heartbeat`   | POST   | Heartbeat + optional status update (stage, health, message) |
+| `/api/v1/tasks`              | GET    | List tasks (filter by status, assignment, role)             |
+| `/api/v1/tasks/:id`          | PATCH  | Update task fields (status, priority, result)               |
+| `/api/v1/tasks/:id/complete` | POST   | Mark task completed with optional result payload            |
+| `/api/v1/tasks/:id/comments` | POST   | Add comment to task                                         |
+| `/api/v1/tasks/:id/assign`   | POST   | Assign agent to task (lead only)                            |
+| `/api/v1/projects/:id`       | GET    | Get project with team, files (signed URLs)                  |
+| `/api/v1/projects/:id/tasks` | POST   | Create subtask (lead only)                                  |
+| `/api/v1/problems`           | POST   | Report a problem/incident                                   |
+| `/api/v1/activity-log`       | POST   | Log custom activity entry                                   |
 
 Authenticate with `Authorization: Bearer <api-key>`. Rate-limited per agent.
+
+**MCP** — native integration for Claude Code / Cursor:
+
+Configure `DOOP_API_URL` and `DOOP_API_KEY` in your `.mcp.json`. The MCP server wraps the REST API — no Supabase credentials needed on the client.
 
 ### File Attachments
 

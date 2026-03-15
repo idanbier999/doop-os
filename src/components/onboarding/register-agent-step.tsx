@@ -63,6 +63,7 @@ export function RegisterAgentStep({ workspaceId, onComplete }: RegisterAgentStep
         2
       );
     }
+    const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
     return JSON.stringify(
       {
         mcpServers: {
@@ -70,6 +71,7 @@ export function RegisterAgentStep({ workspaceId, onComplete }: RegisterAgentStep
             command: "node",
             args: ["path/to/doop-mcp/build/index.js"],
             env: {
+              DOOP_API_URL: `${baseUrl}/api/v1`,
               DOOP_API_KEY: createdAgent.apiKey,
             },
           },

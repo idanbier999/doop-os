@@ -279,6 +279,64 @@ describe("GET /api/v1/projects/[id]", () => {
     expect(json.team[0].agent.id).toBe("agent-001");
   });
 
+  it("returns files with signed_url field", async () => {
+    const membershipChain = createMockSupabaseClient().chain;
+    mockResolve(membershipChain, { role: "member" });
+
+    const projectChain = createMockSupabaseClient().chain;
+    mockResolve(projectChain, {
+      id: "proj-001",
+      name: "Test Project",
+      description: null,
+      instructions: null,
+      orchestration_mode: "collaborative",
+      status: "active",
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-02T00:00:00Z",
+    });
+
+    const teamChain = createMockSupabaseClient().chain;
+    mockResolve(teamChain, []);
+
+    const filesChain = createMockSupabaseClient().chain;
+    mockResolve(filesChain, [
+      {
+        id: "file-001",
+        file_name: "readme.md",
+        file_path: "proj-001/readme.md",
+        mime_type: "text/markdown",
+        file_size: 1024,
+      },
+    ]);
+
+    mockSupabase.from
+      .mockReturnValueOnce(membershipChain)
+      .mockReturnValueOnce(projectChain)
+      .mockReturnValueOnce(teamChain)
+      .mockReturnValueOnce(filesChain);
+
+    (mockSupabase.client as Record<string, unknown>).storage = {
+      from: vi.fn().mockReturnValue({
+        createSignedUrl: vi.fn().mockResolvedValue({
+          data: { signedUrl: "https://storage.example.com/signed/readme.md" },
+          error: null,
+        }),
+      }),
+    };
+
+    const request = new NextRequest("http://localhost/api/v1/projects/proj-001", {
+      method: "GET",
+      headers: { Authorization: "Bearer test-key" },
+    });
+
+    const response = await GET(request, makeParams("proj-001"));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.files).toHaveLength(1);
+    expect(json.files[0].signed_url).toBe("https://storage.example.com/signed/readme.md");
+  });
+
   it("verifies has_webhook is boolean (not the URL string)", async () => {
     const membershipChain = createMockSupabaseClient().chain;
     mockResolve(membershipChain, { role: "member" });
