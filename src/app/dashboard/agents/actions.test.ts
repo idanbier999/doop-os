@@ -9,6 +9,12 @@ vi.mock("@/lib/supabase/server-with-auth", () => ({
   getAuthenticatedSupabase: vi.fn(),
 }));
 
+vi.mock("@/lib/api-key-hash", () => ({
+  generateApiKey: vi.fn(() => "doop_abcdef1234567890abcdef12345678"),
+  hashApiKey: vi.fn(() => "sha256_hashed_value_here_64chars_padding_xxxxxxxxxxxxxxxxxxxxxx"),
+  apiKeyPrefix: vi.fn(() => "doop_abcdef1"),
+}));
+
 // Import AFTER vi.mock
 import { getAuthenticatedSupabase } from "@/lib/supabase/server-with-auth";
 import { createAgent } from "./actions";
@@ -56,14 +62,13 @@ describe("createAgent", () => {
     expect(mockSupabase.from).toHaveBeenCalledWith("workspace_members");
   });
 
-  it("creates agent and returns agent details", async () => {
+  it("creates agent and returns agent details with generated API key", async () => {
     const memberChain = createMockSupabaseClient().chain;
     mockResolve(memberChain, { role: "owner" });
 
     const agentChain = createMockSupabaseClient().chain;
     mockResolve(agentChain, {
       id: "a-1",
-      api_key: "ak_test1234",
       name: "Bot",
       platform: "github",
     });
@@ -81,11 +86,40 @@ describe("createAgent", () => {
     expect(result).toEqual({
       success: true,
       agentId: "a-1",
-      apiKey: "ak_test1234",
-      apiKeyLast4: "1234",
+      apiKey: "doop_abcdef1234567890abcdef12345678",
+      apiKeyPrefix: "doop_abcdef1",
       name: "Bot",
       platform: "github",
     });
+  });
+
+  it("inserts api_key_hash and api_key_prefix instead of plaintext key", async () => {
+    const memberChain = createMockSupabaseClient().chain;
+    mockResolve(memberChain, { role: "owner" });
+
+    const agentChain = createMockSupabaseClient().chain;
+    mockResolve(agentChain, {
+      id: "a-1",
+      name: "Bot",
+      platform: "github",
+    });
+
+    const activityChain = createMockSupabaseClient().chain;
+    mockResolve(activityChain, null);
+
+    mockSupabase.from
+      .mockReturnValueOnce(memberChain)
+      .mockReturnValueOnce(agentChain)
+      .mockReturnValueOnce(activityChain);
+
+    await createAgent(workspaceId, agentName, platform);
+
+    expect(agentChain.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        api_key_hash: "sha256_hashed_value_here_64chars_padding_xxxxxxxxxxxxxxxxxxxxxx",
+        api_key_prefix: "doop_abcdef1",
+      })
+    );
   });
 
   it("logs agent_registered activity", async () => {
@@ -95,7 +129,6 @@ describe("createAgent", () => {
     const agentChain = createMockSupabaseClient().chain;
     mockResolve(agentChain, {
       id: "a-1",
-      api_key: "ak_test1234",
       name: "Bot",
       platform: "github",
     });
@@ -132,32 +165,5 @@ describe("createAgent", () => {
     const result = await createAgent(workspaceId, agentName, platform);
 
     expect(result).toEqual({ success: false, error: "duplicate key" });
-  });
-
-  it("returns apiKeyLast4 from api_key", async () => {
-    const memberChain = createMockSupabaseClient().chain;
-    mockResolve(memberChain, { role: "member" });
-
-    const agentChain = createMockSupabaseClient().chain;
-    mockResolve(agentChain, {
-      id: "a-2",
-      api_key: "ak_abcdefghXYZ9",
-      name: "Agent2",
-      platform: "slack",
-    });
-
-    const activityChain = createMockSupabaseClient().chain;
-    mockResolve(activityChain, null);
-
-    mockSupabase.from
-      .mockReturnValueOnce(memberChain)
-      .mockReturnValueOnce(agentChain)
-      .mockReturnValueOnce(activityChain);
-
-    const result = await createAgent(workspaceId, "Agent2", "slack");
-
-    expect(result.success).toBe(true);
-    expect((result as any).apiKeyLast4).toBe("XYZ9");
-    expect((result as any).apiKey).toBe("ak_abcdefghXYZ9");
   });
 });

@@ -59,7 +59,7 @@ export default async function DashboardOverviewPage() {
   const { data: wsAgents } = await supabase
     .from("agents")
     .select(
-      "id, name, health, stage, agent_type, last_seen_at, workspace_id, tags, description, metadata, platform, created_at, updated_at, capabilities, webhook_url, webhook_secret, owner_id"
+      "id, name, health, stage, agent_type, last_seen_at, workspace_id, tags, description, metadata, platform, created_at, updated_at, capabilities, webhook_url, webhook_secret, owner_id, api_key_prefix"
     )
     .eq("workspace_id", workspaceId);
 

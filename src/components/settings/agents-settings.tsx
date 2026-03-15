@@ -16,7 +16,7 @@ import { getWorkspaceMemberMap, type MemberInfo } from "@/lib/workspace-members"
 import { Fragment } from "react";
 import type { Tables } from "@/lib/database.types";
 
-type Agent = Tables<"agents">;
+type Agent = Omit<Tables<"agents">, "api_key_hash">;
 
 export function AgentsSettings() {
   const { workspaceId, userId, userRole } = useWorkspace();
@@ -24,7 +24,6 @@ export function AgentsSettings() {
   const { addToast } = useNotifications();
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
-  const [revealedKeys, setRevealedKeys] = useState<Set<string>>(new Set());
   const [deleteTarget, setDeleteTarget] = useState<Agent | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [editingTags, setEditingTags] = useState<string | null>(null);
@@ -45,7 +44,13 @@ export function AgentsSettings() {
     let cancelled = false;
     (async () => {
       const [{ data }, members] = await Promise.all([
-        supabase.from("agents").select("*").eq("workspace_id", workspaceId).order("name"),
+        supabase
+          .from("agents")
+          .select(
+            "id, name, agent_type, health, stage, platform, description, tags, capabilities, webhook_url, webhook_secret, api_key_prefix, owner_id, last_seen_at, metadata, created_at, updated_at, workspace_id"
+          )
+          .eq("workspace_id", workspaceId)
+          .order("name"),
         getWorkspaceMemberMap(supabase, workspaceId),
       ]);
       if (!cancelled) {
@@ -62,18 +67,6 @@ export function AgentsSettings() {
   function canEditAgent(agent: Agent): boolean {
     if (isAdminOrOwner) return true;
     return agent.owner_id === userId;
-  }
-
-  function toggleKeyReveal(agentId: string) {
-    setRevealedKeys((prev) => {
-      const next = new Set(prev);
-      if (next.has(agentId)) {
-        next.delete(agentId);
-      } else {
-        next.add(agentId);
-      }
-      return next;
-    });
   }
 
   function toggleSecretReveal(agentId: string) {
@@ -98,11 +91,6 @@ export function AgentsSettings() {
       }
       return next;
     });
-  }
-
-  function maskKey(key: string | null) {
-    if (!key) return "No key";
-    return key.slice(0, 8) + "..." + key.slice(-4);
   }
 
   function maskSecret(secret: string | null) {
@@ -317,18 +305,9 @@ export function AgentsSettings() {
                           )}
                         </Td>
                         <Td>
-                          <div className="flex items-center gap-2">
-                            <code className="text-xs text-mac-gray font-mono">
-                              {revealedKeys.has(agent.id) ? agent.api_key : maskKey(agent.api_key)}
-                            </code>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => toggleKeyReveal(agent.id)}
-                            >
-                              {revealedKeys.has(agent.id) ? "Hide" : "Show"}
-                            </Button>
-                          </div>
+                          <code className="text-xs text-mac-gray font-mono">
+                            {agent.api_key_prefix ? `${agent.api_key_prefix}...` : "No key"}
+                          </code>
                         </Td>
                         <Td>
                           <Button

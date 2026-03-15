@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { createAgent } from "@/app/dashboard/agents/actions";
 import type { Tables } from "@/lib/database.types";
 
-type Agent = Omit<Tables<"agents">, "api_key">;
+type Agent = Omit<Tables<"agents">, "api_key_hash">;
 
 interface AgentsPageClientProps {
   initialAgents: Agent[];
@@ -36,7 +36,7 @@ export function AgentsPageClient({ initialAgents, agentStats }: AgentsPageClient
   const [createdAgent, setCreatedAgent] = useState<{
     agentId: string;
     apiKey: string;
-    apiKeyLast4: string;
+    apiKeyPrefix: string;
     name: string;
     platform: string | null;
   } | null>(null);
@@ -68,7 +68,7 @@ export function AgentsPageClient({ initialAgents, agentStats }: AgentsPageClient
         setCreatedAgent({
           agentId: result.agentId!,
           apiKey: result.apiKey!,
-          apiKeyLast4: result.apiKeyLast4!,
+          apiKeyPrefix: result.apiKeyPrefix!,
           name: result.name!,
           platform: result.platform ?? null,
         });

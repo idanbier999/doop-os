@@ -18,7 +18,7 @@ export function RegisterAgentStep({ workspaceId, onComplete }: RegisterAgentStep
   const [createdAgent, setCreatedAgent] = useState<{
     agentId: string;
     apiKey: string;
-    apiKeyLast4: string;
+    apiKeyPrefix: string;
     name: string;
     platform: string | null;
   } | null>(null);
@@ -34,7 +34,7 @@ export function RegisterAgentStep({ workspaceId, onComplete }: RegisterAgentStep
         setCreatedAgent({
           agentId: result.agentId!,
           apiKey: result.apiKey!,
-          apiKeyLast4: result.apiKeyLast4!,
+          apiKeyPrefix: result.apiKeyPrefix!,
           name: result.name!,
           platform: result.platform ?? null,
         });

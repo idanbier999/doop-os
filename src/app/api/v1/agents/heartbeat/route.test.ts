@@ -1,11 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
-import {
-  createMockSupabaseClient,
-  mockResolve,
-  mockReject,
-  createTableMocks,
-} from "@/__tests__/mocks/supabase";
+import { createMockSupabaseClient, mockResolve, mockReject } from "@/__tests__/mocks/supabase";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -74,6 +69,38 @@ describe("POST /api/v1/agents/heartbeat", () => {
 
     expect(response.status).toBe(200);
     expect(json.ok).toBe(true);
+  });
+
+  it("returns 200 for malformed JSON body (treated as empty)", async () => {
+    const request = new NextRequest("http://localhost/api/v1/agents/heartbeat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer test-key",
+      },
+      body: "{not valid json",
+    });
+
+    const response = await POST(request);
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+  });
+
+  it("returns 422 when meta is not an object", async () => {
+    const request = new NextRequest("http://localhost/api/v1/agents/heartbeat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer test-key",
+      },
+      body: JSON.stringify({ meta: "not-an-object" }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(422);
   });
 
   it("updates last_seen_at and health to 'healthy'", async () => {
@@ -183,6 +210,93 @@ describe("POST /api/v1/agents/heartbeat", () => {
         metadata: { version: "2.0", custom: "keep-me" },
       })
     );
+  });
+
+  it("returns 422 when body contains unexpected fields", async () => {
+    const request = new NextRequest("http://localhost/api/v1/agents/heartbeat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer test-key",
+      },
+      body: JSON.stringify({ version: "1.0", evil: "payload" }),
+    });
+
+    const response = await POST(request);
+    const json = await response.json();
+
+    expect(response.status).toBe(422);
+    expect(json.error).toBe("Invalid request body");
+  });
+
+  it("returns 422 when status exceeds max length", async () => {
+    const request = new NextRequest("http://localhost/api/v1/agents/heartbeat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer test-key",
+      },
+      body: JSON.stringify({ status: "x".repeat(51) }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(422);
+  });
+
+  it("returns 422 when version exceeds max length", async () => {
+    const request = new NextRequest("http://localhost/api/v1/agents/heartbeat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer test-key",
+      },
+      body: JSON.stringify({ version: "v".repeat(101) }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(422);
+  });
+
+  it("returns 422 when field has wrong type", async () => {
+    const request = new NextRequest("http://localhost/api/v1/agents/heartbeat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer test-key",
+      },
+      body: JSON.stringify({ version: 12345 }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(422);
+  });
+
+  it("accepts valid body with all optional fields", async () => {
+    const selectChain = createMockSupabaseClient().chain;
+    mockResolve(selectChain, { metadata: {} });
+
+    const updateChain = createMockSupabaseClient().chain;
+    mockResolve(updateChain, null);
+
+    mockSupabase.from.mockReturnValueOnce(selectChain).mockReturnValueOnce(updateChain);
+
+    const request = new NextRequest("http://localhost/api/v1/agents/heartbeat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer test-key",
+      },
+      body: JSON.stringify({ status: "ok", version: "1.0", meta: { cpu: 42 } }),
+    });
+
+    const response = await POST(request);
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
   });
 
   it("returns 500 on update error", async () => {

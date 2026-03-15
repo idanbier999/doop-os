@@ -90,7 +90,7 @@ function makeAgent(overrides: Partial<Record<string, unknown>> = {}) {
     capabilities: null,
     webhook_url: null,
     webhook_secret: null,
-    api_key: "key-abcd1234efgh5678",
+    api_key_prefix: "doop_abcd123",
     tags: [],
     owner_id: "user-001",
     ...overrides,

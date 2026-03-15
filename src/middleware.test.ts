@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 import { middleware, config } from "@/middleware";
 
 function createRequest(path: string, cookies?: Record<string, string>) {
@@ -11,6 +12,16 @@ function createRequest(path: string, cookies?: Record<string, string>) {
   }
   return request;
 }
+
+const originalFetch = global.fetch;
+
+beforeEach(() => {
+  vi.restoreAllMocks();
+});
+
+afterEach(() => {
+  global.fetch = originalFetch;
+});
 
 describe("middleware", () => {
   it("redirects unauthenticated user from /dashboard to /login", async () => {
@@ -27,16 +38,25 @@ describe("middleware", () => {
     expect(new URL(response.headers.get("location")!).pathname).toBe("/login");
   });
 
-  it("allows authenticated user to access /dashboard with session cookie", async () => {
+  it("allows authenticated user to access /dashboard with valid session", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ session: { id: "s1" }, user: { id: "u1" } }),
+    });
+
     const request = createRequest("/dashboard", {
       "better-auth.session_token": "valid-session",
     });
     const response = await middleware(request);
-    // NextResponse.next() does not set a redirect location
     expect(response.headers.get("location")).toBeNull();
   });
 
   it("allows authenticated user with __Secure- prefix cookie", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ session: { id: "s1" }, user: { id: "u1" } }),
+    });
+
     const request = createRequest("/dashboard", {
       "__Secure-better-auth.session_token": "valid-session",
     });
@@ -44,10 +64,127 @@ describe("middleware", () => {
     expect(response.headers.get("location")).toBeNull();
   });
 
+  it("redirects to /login and clears cookies when session is invalid", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(null),
+    });
+
+    const request = createRequest("/dashboard", {
+      "better-auth.session_token": "stale-token",
+    });
+    const response = await middleware(request);
+
+    expect(response.status).toBe(307);
+    expect(new URL(response.headers.get("location")!).pathname).toBe("/login");
+    // Cookies should be cleared (set-cookie with max-age=0)
+    const setCookie = response.headers.getSetCookie();
+    expect(setCookie.some((c: string) => c.includes("better-auth.session_token"))).toBe(true);
+  });
+
+  it("redirects to /login when get-session returns non-ok status", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      json: () => Promise.resolve({}),
+    });
+
+    const request = createRequest("/dashboard", {
+      "better-auth.session_token": "expired-token",
+    });
+    const response = await middleware(request);
+
+    expect(response.status).toBe(307);
+    expect(new URL(response.headers.get("location")!).pathname).toBe("/login");
+  });
+
+  it("fails open when fetch throws (network error)", async () => {
+    global.fetch = vi.fn().mockRejectedValue(new Error("ECONNREFUSED"));
+
+    const request = createRequest("/dashboard", {
+      "better-auth.session_token": "valid-session",
+    });
+    const response = await middleware(request);
+
+    // Fail-open: let the request through
+    expect(response.headers.get("location")).toBeNull();
+  });
+
   it("returns next() for /login without cookie (no redirect loop)", async () => {
     const request = createRequest("/login");
     const response = await middleware(request);
     expect(response.headers.get("location")).toBeNull();
+  });
+
+  it("forwards cookies to the get-session endpoint", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ session: { id: "s1" }, user: { id: "u1" } }),
+    });
+    global.fetch = mockFetch;
+
+    const request = createRequest("/dashboard", {
+      "better-auth.session_token": "my-token",
+    });
+    await middleware(request);
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      "http://localhost:3000/api/auth/get-session",
+      expect.objectContaining({
+        headers: expect.objectContaining({ cookie: expect.stringContaining("my-token") }),
+      })
+    );
+  });
+
+  it("fails open when fetch times out (AbortSignal.timeout)", async () => {
+    global.fetch = vi.fn().mockRejectedValue(new DOMException("Signal timed out.", "TimeoutError"));
+
+    const request = createRequest("/dashboard", {
+      "better-auth.session_token": "valid-session",
+    });
+    const response = await middleware(request);
+
+    // Timeout is treated as network error — fail-open
+    expect(response.headers.get("location")).toBeNull();
+  });
+
+  it("clears both cookie variants on invalid session", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(null),
+    });
+
+    const request = createRequest("/dashboard", {
+      "better-auth.session_token": "stale-token",
+      "__Secure-better-auth.session_token": "stale-token",
+    });
+    const response = await middleware(request);
+
+    const setCookie = response.headers.getSetCookie();
+    expect(setCookie.some((c: string) => c.startsWith("better-auth.session_token="))).toBe(true);
+    expect(setCookie.some((c: string) => c.startsWith("__Secure-better-auth.session_token="))).toBe(
+      true
+    );
+  });
+
+  it("returns next() for /signup without cookie (no redirect loop)", async () => {
+    const request = createRequest("/signup");
+    const response = await middleware(request);
+    expect(response.headers.get("location")).toBeNull();
+  });
+
+  it("redirects to /login when session has user but no session object", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ user: { id: "u1" } }),
+    });
+
+    const request = createRequest("/dashboard", {
+      "better-auth.session_token": "partial-token",
+    });
+    const response = await middleware(request);
+
+    expect(response.status).toBe(307);
+    expect(new URL(response.headers.get("location")!).pathname).toBe("/login");
   });
 
   it("config.matcher includes expected patterns", () => {

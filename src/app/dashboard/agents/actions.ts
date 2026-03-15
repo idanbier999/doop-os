@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { getAuthenticatedSupabase } from "@/lib/supabase/server-with-auth";
+import { generateApiKey, hashApiKey, apiKeyPrefix } from "@/lib/api-key-hash";
 
 const createAgentSchema = z.object({
   workspaceId: z.string().uuid(),
@@ -37,7 +38,12 @@ export async function createAgent(workspaceId: string, name: string, platform: s
       return { success: false, error: "Not a member of this workspace" };
     }
 
-    // Insert new agent
+    // Generate API key in app code — only the hash is stored
+    const rawApiKey = generateApiKey();
+    const keyHash = hashApiKey(rawApiKey);
+    const keyPrefix = apiKeyPrefix(rawApiKey);
+
+    // Insert new agent with hashed key
     const { data: agent, error: insertError } = await supabase
       .from("agents")
       .insert({
@@ -46,8 +52,10 @@ export async function createAgent(workspaceId: string, name: string, platform: s
         platform: validatedPlatform,
         health: "offline",
         stage: "idle",
+        api_key_hash: keyHash,
+        api_key_prefix: keyPrefix,
       })
-      .select("id, api_key, name, platform")
+      .select("id, name, platform")
       .single();
 
     if (insertError || !agent) {
@@ -56,8 +64,6 @@ export async function createAgent(workspaceId: string, name: string, platform: s
         error: insertError?.message ?? "Failed to create agent",
       };
     }
-
-    const apiKey = agent.api_key!;
 
     // Log the registration activity
     await supabase.from("activity_log").insert({
@@ -70,8 +76,8 @@ export async function createAgent(workspaceId: string, name: string, platform: s
     return {
       success: true,
       agentId: agent.id,
-      apiKey,
-      apiKeyLast4: apiKey.slice(-4),
+      apiKey: rawApiKey,
+      apiKeyPrefix: keyPrefix,
       name: agent.name,
       platform: agent.platform,
     };

@@ -9,7 +9,7 @@ import {
 } from "@/components/fleet/operator-fleet-summary";
 import type { Tables } from "@/lib/database.types";
 
-type Agent = Omit<Tables<"agents">, "api_key">;
+type Agent = Omit<Tables<"agents">, "api_key_hash">;
 
 interface FleetPageClientProps {
   agents: Agent[];

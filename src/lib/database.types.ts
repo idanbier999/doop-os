@@ -202,7 +202,8 @@ export type Database = {
       agents: {
         Row: {
           agent_type: string | null;
-          api_key: string | null;
+          api_key_hash: string;
+          api_key_prefix: string;
           capabilities: string[] | null;
           created_at: string | null;
           description: string | null;
@@ -222,7 +223,8 @@ export type Database = {
         };
         Insert: {
           agent_type?: string | null;
-          api_key?: string | null;
+          api_key_hash: string;
+          api_key_prefix: string;
           capabilities?: string[] | null;
           created_at?: string | null;
           description?: string | null;
@@ -242,7 +244,8 @@ export type Database = {
         };
         Update: {
           agent_type?: string | null;
-          api_key?: string | null;
+          api_key_hash?: string;
+          api_key_prefix?: string;
           capabilities?: string[] | null;
           created_at?: string | null;
           description?: string | null;

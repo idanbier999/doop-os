@@ -3,7 +3,7 @@ import { AgentTags } from "@/components/agents/agent-tags";
 import { relativeTime } from "@/lib/utils";
 import type { Tables } from "@/lib/database.types";
 
-type Agent = Omit<Tables<"agents">, "api_key">;
+type Agent = Omit<Tables<"agents">, "api_key_hash">;
 
 const healthDotColors: Record<string, string> = {
   healthy: "bg-health-healthy",

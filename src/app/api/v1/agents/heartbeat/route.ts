@@ -1,8 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { authenticateAgent } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { withRateLimit } from "@/lib/api-rate-limit";
 import type { Json } from "@/lib/database.types";
+
+const heartbeatBodySchema = z
+  .object({
+    // status is validated but not persisted yet — reserved for future use
+    status: z.string().max(50).optional(),
+    version: z.string().max(100).optional(),
+    meta: z.record(z.string(), z.unknown()).optional(),
+  })
+  .strict();
 
 async function handlePost(request: NextRequest) {
   const agent = await authenticateAgent(request);
@@ -11,9 +21,17 @@ async function handlePost(request: NextRequest) {
   }
 
   // Parse optional body — may be empty
-  let body: { status?: string; version?: string; meta?: Record<string, unknown> } = {};
+  let body: z.infer<typeof heartbeatBodySchema> = {};
   try {
-    body = await request.json();
+    const raw = await request.json();
+    const parsed = heartbeatBodySchema.safeParse(raw);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Invalid request body", details: parsed.error.issues },
+        { status: 422 }
+      );
+    }
+    body = parsed.data;
   } catch {
     // Body is empty or invalid JSON — that's fine, all fields are optional
   }
