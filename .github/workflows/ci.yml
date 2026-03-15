@@ -14,8 +14,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: ".nvmrc"
-          cache: "npm"
-      - run: npm ci
+      - run: npm install --ignore-scripts
       - run: npm run lint
 
   typecheck:
@@ -25,8 +24,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: ".nvmrc"
-          cache: "npm"
-      - run: npm ci
+      - run: npm install --ignore-scripts
       - run: npm run typecheck
 
   test:
@@ -36,8 +34,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: ".nvmrc"
-          cache: "npm"
-      - run: npm ci
+      - run: npm install --ignore-scripts
       - run: npm test
 
   format:
@@ -47,8 +44,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: ".nvmrc"
-          cache: "npm"
-      - run: npm ci
+      - run: npm install --ignore-scripts
       - run: npm run format:check
 
   build:
@@ -59,8 +55,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: ".nvmrc"
-          cache: "npm"
-      - run: npm ci
+      - run: npm install --ignore-scripts
       - run: npm run build
         env:
           NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
@@ -78,8 +73,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: ".nvmrc"
-          cache: "npm"
-      - run: npm ci
+      - run: npm install --ignore-scripts
       - run: npm audit --audit-level=high
 
   secrets-scan:
