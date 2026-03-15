@@ -1,0 +1,142 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-background: #edeef2;
+  --color-foreground: #1a1a2e;
+  --font-pixel: "VT323", "Geneva", "Chicago", monospace;
+  --font-body: "Space Grotesk", system-ui, sans-serif;
+
+  /* Mac palette */
+  --color-mac-cream: #edeef2;
+  --color-mac-white: #ffffff;
+  --color-mac-black: #1a1a2e;
+  --color-mac-gray: #9ca3b0;
+  --color-mac-light-gray: #dfe2e8;
+  --color-mac-dark-gray: #4a4e69;
+  --color-mac-highlight: #0066ff;
+  --color-mac-highlight-text: #ffffff;
+
+  /* New tokens */
+  --color-mac-highlight-soft: #e8f0ff;
+  --color-mac-highlight-hover: #0052cc;
+  --color-mac-border: #c5c9d4;
+  --color-mac-border-strong: #1a1a2e;
+  --color-mac-shadow: #4a4e69;
+  --color-mac-shadow-soft: rgba(74, 78, 105, 0.12);
+
+  /* Health status colors */
+  --color-health-healthy: #00875a;
+  --color-health-degraded: #997a00;
+  --color-health-critical: #de350b;
+  --color-health-offline: #6b778c;
+
+  /* Severity colors */
+  --color-severity-low: #0065ff;
+  --color-severity-medium: #997a00;
+  --color-severity-high: #ff8b00;
+  --color-severity-critical: #de350b;
+
+  /* Agent stage colors */
+  --color-stage-idle: #6b778c;
+  --color-stage-running: #00875a;
+  --color-stage-blocked: #ff8b00;
+  --color-stage-completed: #0065ff;
+  --color-stage-error: #de350b;
+
+  /* Priority colors */
+  --color-priority-low: #6b778c;
+  --color-priority-medium: #997a00;
+  --color-priority-high: #ff8b00;
+  --color-priority-critical: #de350b;
+
+  /* Task/problem status colors */
+  --color-status-pending: #6b778c;
+  --color-status-in-progress: #0065ff;
+  --color-status-waiting-on-agent: #8250df;
+  --color-status-waiting-on-human: #bf8700;
+  --color-status-completed: #00875a;
+  --color-status-cancelled: #6b778c;
+}
+
+body {
+  background: radial-gradient(ellipse at 50% 0%, #f5f6fa 0%, #edeef2 60%);
+  color: #1a1a2e;
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Mac Window */
+.mac-window {
+  border: 1.5px solid #1a1a2e;
+  border-radius: 6px;
+  background: #fff;
+  box-shadow:
+    1px 1px 0px #4a4e69,
+    0px 4px 12px rgba(74, 78, 105, 0.12);
+}
+
+/* Title Bar */
+.mac-title-bar {
+  background: linear-gradient(to bottom, #ffffff 0%, #f0f1f4 100%);
+  height: 28px;
+  border-bottom: 1px solid #c5c9d4;
+  border-radius: 6px 6px 0 0;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  position: relative;
+}
+
+.mac-title-bar-title {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  background: transparent;
+  padding: 0 6px;
+  font-size: 12px;
+  font-weight: bold;
+  font-family: "VT323", "Geneva", "Chicago", monospace;
+  line-height: 28px;
+  white-space: nowrap;
+  color: #1a1a2e;
+}
+
+/* Close Box */
+.mac-close-box {
+  width: 12px;
+  height: 12px;
+  border: 1px solid #1a1a2e;
+  border-radius: 3px;
+  background: #fff;
+  cursor: pointer;
+  flex-shrink: 0;
+  z-index: 1;
+  transition: all 0.15s ease;
+}
+
+.mac-close-box:hover {
+  background: #0066ff;
+  border-color: #0066ff;
+  transform: scale(1.1);
+}
+
+/* Inset Input Style */
+.mac-inset {
+  border: 1px solid #c5c9d4;
+  box-shadow: inset 0px 1px 2px rgba(74, 78, 105, 0.08);
+  background: #fff;
+}
+
+/* Glass panels */
+.glass-panel {
+  backdrop-filter: blur(12px) saturate(1.2);
+  -webkit-backdrop-filter: blur(12px) saturate(1.2);
+  background: rgba(255, 255, 255, 0.75);
+}
+
+.glass-overlay {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  background: rgba(26, 26, 46, 0.3);
+}
