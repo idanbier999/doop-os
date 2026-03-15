@@ -1,0 +1,11 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Allow false positives: test fixtures, CI placeholders, and documentation examples"
+paths = [
+  '''\.test\.(ts|tsx)$''',
+  '''__tests__/''',
+  '''src/app/dashboard/docs/page\.tsx$''',
+  '''\.github/workflows/ci\.yml$''',
+]
