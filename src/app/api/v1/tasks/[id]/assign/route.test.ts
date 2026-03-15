@@ -59,7 +59,7 @@ describe("POST /api/v1/tasks/:id/assign", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        agent_id: "00000000-0000-0000-0000-000000000002",
+        agent_id: "00000000-0000-4000-a000-000000000002",
         role: "primary",
       }),
     });
@@ -84,7 +84,7 @@ describe("POST /api/v1/tasks/:id/assign", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        agent_id: "00000000-0000-0000-0000-000000000002",
+        agent_id: "00000000-0000-4000-a000-000000000002",
         role: "owner",
       }),
     });
@@ -100,7 +100,7 @@ describe("POST /api/v1/tasks/:id/assign", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        agent_id: "00000000-0000-0000-0000-000000000002",
+        agent_id: "00000000-0000-4000-a000-000000000002",
         role: "primary",
       }),
     });
@@ -121,7 +121,7 @@ describe("POST /api/v1/tasks/:id/assign", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        agent_id: "00000000-0000-0000-0000-000000000002",
+        agent_id: "00000000-0000-4000-a000-000000000002",
         role: "primary",
       }),
     });
@@ -144,7 +144,7 @@ describe("POST /api/v1/tasks/:id/assign", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        agent_id: "00000000-0000-0000-0000-000000000002",
+        agent_id: "00000000-0000-4000-a000-000000000002",
         role: "primary",
       }),
     });
@@ -161,7 +161,7 @@ describe("POST /api/v1/tasks/:id/assign", () => {
     mockResolve(callerMembershipChain, { role: "lead" });
 
     const targetMembershipChain = createMockSupabaseClient().chain;
-    mockResolve(targetMembershipChain, { agent_id: "00000000-0000-0000-0000-000000000002" });
+    mockResolve(targetMembershipChain, { agent_id: "00000000-0000-4000-a000-000000000002" });
 
     const existingChain = createMockSupabaseClient().chain;
     mockResolve(existingChain, null); // No existing assignment
@@ -181,7 +181,7 @@ describe("POST /api/v1/tasks/:id/assign", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        agent_id: "00000000-0000-0000-0000-000000000002",
+        agent_id: "00000000-0000-4000-a000-000000000002",
         role: "primary",
       }),
     });
@@ -191,7 +191,7 @@ describe("POST /api/v1/tasks/:id/assign", () => {
 
     expect(response.status).toBe(200);
     expect(json.task_id).toBe("task-001");
-    expect(json.agent_id).toBe("00000000-0000-0000-0000-000000000002");
+    expect(json.agent_id).toBe("00000000-0000-4000-a000-000000000002");
     expect(json.role).toBe("primary");
   });
 });

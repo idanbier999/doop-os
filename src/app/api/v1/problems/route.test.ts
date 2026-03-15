@@ -137,7 +137,7 @@ describe("POST /api/v1/problems", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         title: "Problem with task",
-        task_id: "00000000-0000-0000-0000-000000000001",
+        task_id: "00000000-0000-4000-a000-000000000001",
       }),
     });
 
