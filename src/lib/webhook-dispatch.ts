@@ -1,5 +1,3 @@
-"use server";
-
 import crypto from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { validateWebhookUrl } from "@/lib/url-validation";
