@@ -1,11 +1,12 @@
-# Contributing to Doop Dashboard
+# Contributing to Doop
 
-Thank you for your interest in contributing to Doop Dashboard! This guide will help you get started.
+Thank you for your interest in contributing to Doop! This guide will help you get started.
 
 ## Table of Contents
 
 - [Development Environment](#development-environment)
 - [Getting Started](#getting-started)
+- [Database](#database)
 - [Branch Naming](#branch-naming)
 - [Commit Messages](#commit-messages)
 - [Running Checks](#running-checks)
@@ -18,7 +19,8 @@ Before you begin, make sure you have the following installed:
 
 - **Node.js 20+** (see `.nvmrc` for the exact version)
 - **npm** (comes with Node.js)
-- **Supabase CLI** (for local database development) -- [install guide](https://supabase.com/docs/guides/cli/getting-started)
+- **Supabase CLI** -- [install guide](https://supabase.com/docs/guides/cli/getting-started)
+- **Docker** (for local Supabase development)
 
 ## Getting Started
 
@@ -45,13 +47,55 @@ Before you begin, make sure you have the following installed:
 
    Fill in the required values in `.env.local`. See the comments in `.env.example` for guidance on where to obtain each value.
 
-5. **Start the development server:**
+5. **Set up the database:**
+
+   For local development (recommended):
+
+   ```bash
+   supabase start
+   ```
+
+   This starts a local Supabase instance and automatically applies all migrations from `supabase/migrations/`. The CLI output will show the local credentials to use in `.env.local`.
+
+   For remote Supabase:
+
+   ```bash
+   supabase link --project-ref <your-project-ref>
+   supabase db push
+   ```
+
+6. **Start the development server:**
 
    ```bash
    npm run dev
    ```
 
    The app will be available at [http://localhost:3000](http://localhost:3000).
+
+## Database
+
+### Creating a new migration
+
+When you need to change the database schema:
+
+```bash
+supabase migration new <descriptive-name>
+```
+
+This creates a new timestamped SQL file in `supabase/migrations/`. Write your DDL statements there.
+
+### Applying migrations
+
+- **Local:** `supabase db reset` re-creates the database and applies all migrations from scratch.
+- **Remote:** `supabase db push` applies pending migrations to the linked project.
+
+### Generating types
+
+After schema changes, regenerate the TypeScript types:
+
+```bash
+supabase gen types typescript --local > src/lib/database.types.ts
+```
 
 ## Branch Naming
 

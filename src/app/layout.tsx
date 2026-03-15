@@ -15,8 +15,15 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "Doop — Control Plane for Autonomous AI",
-  description: "Audit, govern, and operate your AI agents at scale.",
+  title: "Doop — Operating System for Your AI Workforce",
+  description: "Orchestrate, monitor, and govern your AI agents from one control plane.",
+  icons: {
+    icon: [
+      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+      { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
+    ],
+    apple: "/apple-touch-icon.png",
+  },
 };
 
 export default function RootLayout({

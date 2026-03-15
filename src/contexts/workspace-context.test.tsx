@@ -11,11 +11,13 @@ describe("WorkspaceContext", () => {
 
     const { result } = renderHook(() => useWorkspace(), { wrapper });
 
-    expect(result.current).toEqual({
+    expect(result.current).toMatchObject({
       workspaceId: "ws-123",
       userId: "user-456",
       userRole: "admin",
+      fleetScope: "all",
     });
+    expect(typeof result.current.setFleetScope).toBe("function");
   });
 
   it("useWorkspace throws when used outside provider", () => {

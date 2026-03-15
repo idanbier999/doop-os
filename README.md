@@ -1,6 +1,15 @@
-# Doop Dashboard
+<p align="center">
+  <img src="public/banner.png" alt="Doop" width="600" />
+</p>
 
-Doop helps teams (and solos) work with multiple AI agents — orchestrate, monitor, and govern your AI workforce from one control plane.
+<h1 align="center">Doop</h1>
+
+<p align="center">
+  <strong>The operating system for your AI workforce.</strong><br/>
+  Orchestrate, monitor, and govern your AI agents from one control plane.
+</p>
+
+> **Pre-release (v0.1.0)** — Doop is under active development. APIs may change. Contributions and feedback are welcome!
 
 ## Features
 
@@ -31,30 +40,62 @@ Doop helps teams (and solos) work with multiple AI agents — orchestrate, monit
 
 - [Node.js](https://nodejs.org/) 20+ (see `.nvmrc`)
 - npm
-- A [Supabase](https://supabase.com/) project
+- A [Supabase](https://supabase.com/) project (or Docker for local development)
+- [Supabase CLI](https://supabase.com/docs/guides/cli/getting-started)
 
-## Getting Started
+## Quick Start
 
-1. **Clone the repository:**
+```bash
+npx create-doop my-dashboard
+cd my-dashboard
+npm run dev
+```
+
+That's it. The CLI clones the repo, installs dependencies, and — if Docker + Supabase CLI are available — starts a local Supabase and wires up `.env.local` automatically.
+
+Open [http://localhost:3000](http://localhost:3000).
+
+## Manual Setup
+
+<details>
+<summary>Step-by-step instructions (click to expand)</summary>
+
+1. **Clone and install:**
 
    ```bash
-   git clone https://github.com/doop/doop-dashboard.git
+   git clone https://github.com/doophq/doop-dashboard.git
    cd doop-dashboard
-   ```
-
-2. **Install dependencies:**
-
-   ```bash
    npm install
    ```
 
-3. **Set up environment variables:**
+2. **Set up environment variables:**
 
    ```bash
    cp .env.example .env.local
    ```
 
    Fill in the values — see `.env.example` for details on each variable.
+
+3. **Set up the database:**
+
+   **Option A — Local Supabase (recommended for development):**
+
+   Requires [Docker](https://www.docker.com/) to be running.
+
+   ```bash
+   supabase start
+   ```
+
+   Migrations apply automatically. The CLI prints local credentials — use them in `.env.local`.
+
+   **Option B — Remote Supabase (recommended for production):**
+
+   Create a Supabase project at [supabase.com](https://supabase.com), then:
+
+   ```bash
+   supabase link --project-ref <your-project-ref>
+   supabase db push
+   ```
 
 4. **Start the development server:**
 
@@ -63,6 +104,23 @@ Doop helps teams (and solos) work with multiple AI agents — orchestrate, monit
    ```
 
    Open [http://localhost:3000](http://localhost:3000).
+
+</details>
+
+## First Login
+
+1. **Sign up** with email/password or Google OAuth.
+2. **Create a workspace** — you'll be guided through the onboarding wizard.
+3. **Register your first agent** — give it a name and optionally configure a webhook URL.
+4. You'll land on the **Dashboard** showing your agent fleet, recent activity, and task pipeline.
+
+## Slack Notifications
+
+Slack integration is configured per-workspace (no environment variable needed):
+
+1. Go to **Settings > Notifications** in the dashboard.
+2. Paste your Slack incoming webhook URL.
+3. Choose which problem severity levels trigger notifications.
 
 ## Available Scripts
 
@@ -92,9 +150,10 @@ src/
   hooks/                # Custom hooks (Supabase, realtime)
   lib/                  # Utilities and business logic
     supabase/           # Supabase client factories
+supabase/
+  migrations/           # Database migrations (run via supabase db push)
+  config.toml           # Local Supabase configuration
 ```
-
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed architecture documentation.
 
 ## Contributing
 

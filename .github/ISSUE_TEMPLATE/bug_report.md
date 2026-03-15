@@ -29,7 +29,7 @@ assignees: ""
 - OS:
 - Browser:
 - Node.js version:
-- Doop Dashboard version:
+- Doop version:
 
 ## Screenshots
 

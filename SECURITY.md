@@ -29,7 +29,7 @@ Please include:
 
 ## Scope
 
-This security policy covers the Doop Dashboard application and its dependencies.
+This security policy covers the Doop application and its dependencies.
 
 ## Recognition
 

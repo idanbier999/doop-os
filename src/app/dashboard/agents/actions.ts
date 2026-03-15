@@ -82,3 +82,56 @@ export async function createAgent(workspaceId: string, name: string, platform: s
     };
   }
 }
+
+const reassignAgentOwnerSchema = z.object({
+  workspaceId: z.string().uuid(),
+  agentId: z.string().uuid(),
+  newOwnerId: z.string().uuid().nullable(),
+});
+
+export async function reassignAgentOwner(
+  workspaceId: string,
+  agentId: string,
+  newOwnerId: string | null
+) {
+  try {
+    const parsed = reassignAgentOwnerSchema.safeParse({ workspaceId, agentId, newOwnerId });
+    if (!parsed.success) {
+      return { success: false, error: parsed.error.issues[0].message };
+    }
+
+    const { user, supabase } = await getAuthenticatedSupabase();
+    if (!user || !supabase) {
+      return { success: false, error: "Not authenticated" };
+    }
+
+    // Authorize — must be admin or owner of the workspace
+    const { data: member } = await supabase
+      .from("workspace_members")
+      .select("role")
+      .eq("workspace_id", parsed.data.workspaceId)
+      .eq("user_id", user.id)
+      .single();
+
+    if (!member || !["owner", "admin"].includes(member.role)) {
+      return { success: false, error: "Insufficient permissions" };
+    }
+
+    const { error: updateError } = await supabase
+      .from("agents")
+      .update({ owner_id: parsed.data.newOwnerId })
+      .eq("id", parsed.data.agentId)
+      .eq("workspace_id", parsed.data.workspaceId);
+
+    if (updateError) {
+      return { success: false, error: updateError.message };
+    }
+
+    return { success: true };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Unknown error",
+    };
+  }
+}

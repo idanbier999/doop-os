@@ -28,6 +28,7 @@ export const serverEnv = {
   BETTER_AUTH_URL: required("BETTER_AUTH_URL"),
   GOOGLE_CLIENT_ID: optional("GOOGLE_CLIENT_ID"),
   GOOGLE_CLIENT_SECRET: optional("GOOGLE_CLIENT_SECRET"),
+  BETTER_AUTH_TRUSTED_ORIGINS: optional("BETTER_AUTH_TRUSTED_ORIGINS"),
 } as const;
 
 // --- Combined export for convenience ---

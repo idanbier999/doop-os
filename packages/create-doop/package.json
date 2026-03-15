@@ -1,0 +1,28 @@
+{
+  "name": "create-doop",
+  "version": "0.1.0",
+  "description": "Scaffold the Doop operating system for your AI workforce",
+  "license": "MIT",
+  "bin": {
+    "create-doop": "./index.mjs"
+  },
+  "files": [
+    "index.mjs"
+  ],
+  "keywords": [
+    "doop",
+    "ai-agents",
+    "ai-workforce",
+    "operating-system",
+    "scaffold",
+    "create"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/doophq/doop-dashboard",
+    "directory": "packages/create-doop"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

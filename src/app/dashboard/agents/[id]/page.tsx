@@ -36,7 +36,7 @@ export default async function AgentDetailPage({ params }: AgentDetailPageProps) 
   const { data: agent } = await supabase
     .from("agents")
     .select(
-      "id, name, health, stage, agent_type, last_seen_at, workspace_id, tags, description, metadata, platform, created_at, updated_at, capabilities, webhook_url, webhook_secret"
+      "id, name, health, stage, agent_type, last_seen_at, workspace_id, tags, description, metadata, platform, created_at, updated_at, capabilities, webhook_url, webhook_secret, owner_id"
     )
     .eq("id", id)
     .single();

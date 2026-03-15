@@ -22,7 +22,7 @@ export default async function AgentsPage() {
   const { data: agents } = await supabase
     .from("agents")
     .select(
-      "id, name, health, stage, agent_type, last_seen_at, workspace_id, tags, description, metadata, platform, created_at, updated_at, capabilities, webhook_url, webhook_secret"
+      "id, name, health, stage, agent_type, last_seen_at, workspace_id, tags, description, metadata, platform, created_at, updated_at, capabilities, webhook_url, webhook_secret, owner_id"
     )
     .eq("workspace_id", membership.workspace_id)
     .order("name");
