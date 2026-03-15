@@ -1,0 +1,137 @@
+"use server";
+
+import { z } from "zod";
+import { getAuthenticatedSupabase } from "@/lib/supabase/server-with-auth";
+
+const createAgentSchema = z.object({
+  workspaceId: z.string().uuid(),
+  name: z.string().trim().min(1).max(100),
+  platform: z.string().trim().min(1).max(50),
+});
+
+export async function createAgent(workspaceId: string, name: string, platform: string) {
+  try {
+    const parsed = createAgentSchema.safeParse({ workspaceId, name, platform });
+    if (!parsed.success) {
+      return { success: false, error: parsed.error.issues[0].message };
+    }
+
+    const validatedWorkspaceId = parsed.data.workspaceId;
+    const validatedName = parsed.data.name;
+    const validatedPlatform = parsed.data.platform;
+
+    const { user, supabase } = await getAuthenticatedSupabase();
+    if (!user || !supabase) {
+      return { success: false, error: "Not authenticated" };
+    }
+
+    // Authorize — confirm user is a member of this workspace
+    const { data: member, error: memberError } = await supabase
+      .from("workspace_members")
+      .select("role")
+      .eq("workspace_id", validatedWorkspaceId)
+      .eq("user_id", user.id)
+      .single();
+
+    if (memberError || !member) {
+      return { success: false, error: "Not a member of this workspace" };
+    }
+
+    // Insert new agent
+    const { data: agent, error: insertError } = await supabase
+      .from("agents")
+      .insert({
+        workspace_id: validatedWorkspaceId,
+        name: validatedName,
+        platform: validatedPlatform,
+        health: "offline",
+        stage: "idle",
+      })
+      .select("id, api_key, name, platform")
+      .single();
+
+    if (insertError || !agent) {
+      return {
+        success: false,
+        error: insertError?.message ?? "Failed to create agent",
+      };
+    }
+
+    const apiKey = agent.api_key!;
+
+    // Log the registration activity
+    await supabase.from("activity_log").insert({
+      action: "agent_registered",
+      agent_id: agent.id,
+      workspace_id: validatedWorkspaceId,
+      details: { name: validatedName, platform: validatedPlatform },
+    });
+
+    return {
+      success: true,
+      agentId: agent.id,
+      apiKey,
+      apiKeyLast4: apiKey.slice(-4),
+      name: agent.name,
+      platform: agent.platform,
+    };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Unknown error",
+    };
+  }
+}
+
+const reassignAgentOwnerSchema = z.object({
+  workspaceId: z.string().uuid(),
+  agentId: z.string().uuid(),
+  newOwnerId: z.string().uuid().nullable(),
+});
+
+export async function reassignAgentOwner(
+  workspaceId: string,
+  agentId: string,
+  newOwnerId: string | null
+) {
+  try {
+    const parsed = reassignAgentOwnerSchema.safeParse({ workspaceId, agentId, newOwnerId });
+    if (!parsed.success) {
+      return { success: false, error: parsed.error.issues[0].message };
+    }
+
+    const { user, supabase } = await getAuthenticatedSupabase();
+    if (!user || !supabase) {
+      return { success: false, error: "Not authenticated" };
+    }
+
+    // Authorize — must be admin or owner of the workspace
+    const { data: member } = await supabase
+      .from("workspace_members")
+      .select("role")
+      .eq("workspace_id", parsed.data.workspaceId)
+      .eq("user_id", user.id)
+      .single();
+
+    if (!member || !["owner", "admin"].includes(member.role)) {
+      return { success: false, error: "Insufficient permissions" };
+    }
+
+    const { error: updateError } = await supabase
+      .from("agents")
+      .update({ owner_id: parsed.data.newOwnerId })
+      .eq("id", parsed.data.agentId)
+      .eq("workspace_id", parsed.data.workspaceId);
+
+    if (updateError) {
+      return { success: false, error: updateError.message };
+    }
+
+    return { success: true };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Unknown error",
+    };
+  }
+}

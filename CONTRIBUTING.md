@@ -1,0 +1,177 @@
+# Contributing to Doop
+
+Thank you for your interest in contributing to Doop! This guide will help you get started.
+
+## Table of Contents
+
+- [Development Environment](#development-environment)
+- [Getting Started](#getting-started)
+- [Database](#database)
+- [Branch Naming](#branch-naming)
+- [Commit Messages](#commit-messages)
+- [Running Checks](#running-checks)
+- [Pull Request Process](#pull-request-process)
+- [Code Style](#code-style)
+
+## Development Environment
+
+Before you begin, make sure you have the following installed:
+
+- **Node.js 20+** (see `.nvmrc` for the exact version)
+- **npm** (comes with Node.js)
+- **Supabase CLI** -- [install guide](https://supabase.com/docs/guides/cli/getting-started)
+- **Docker** (for local Supabase development)
+
+## Getting Started
+
+1. **Fork** the repository on GitHub.
+
+2. **Clone** your fork locally:
+
+   ```bash
+   git clone https://github.com/<your-username>/doop-dashboard.git
+   cd doop-dashboard
+   ```
+
+3. **Install dependencies:**
+
+   ```bash
+   npm install
+   ```
+
+4. **Set up environment variables:**
+
+   ```bash
+   cp .env.example .env.local
+   ```
+
+   Fill in the required values in `.env.local`. See the comments in `.env.example` for guidance on where to obtain each value.
+
+5. **Set up the database:**
+
+   For local development (recommended):
+
+   ```bash
+   supabase start
+   ```
+
+   This starts a local Supabase instance and automatically applies all migrations from `supabase/migrations/`. The CLI output will show the local credentials to use in `.env.local`.
+
+   For remote Supabase:
+
+   ```bash
+   supabase link --project-ref <your-project-ref>
+   supabase db push
+   ```
+
+6. **Start the development server:**
+
+   ```bash
+   npm run dev
+   ```
+
+   The app will be available at [http://localhost:3000](http://localhost:3000).
+
+## Database
+
+### Creating a new migration
+
+When you need to change the database schema:
+
+```bash
+supabase migration new <descriptive-name>
+```
+
+This creates a new timestamped SQL file in `supabase/migrations/`. Write your DDL statements there.
+
+### Applying migrations
+
+- **Local:** `supabase db reset` re-creates the database and applies all migrations from scratch.
+- **Remote:** `supabase db push` applies pending migrations to the linked project.
+
+### Generating types
+
+After schema changes, regenerate the TypeScript types:
+
+```bash
+supabase gen types typescript --local > src/lib/database.types.ts
+```
+
+## Branch Naming
+
+Use the following prefixes for your branches:
+
+| Prefix   | Purpose                           |
+| -------- | --------------------------------- |
+| `feat/`  | New features                      |
+| `fix/`   | Bug fixes                         |
+| `chore/` | Maintenance, refactoring, tooling |
+
+Examples: `feat/add-agent-bulk-actions`, `fix/webhook-retry-loop`, `chore/update-deps`.
+
+## Commit Messages
+
+We follow the [Conventional Commits](https://www.conventionalcommits.org/) specification:
+
+```
+<type>(<optional scope>): <description>
+
+[optional body]
+
+[optional footer(s)]
+```
+
+**Types:** `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`, `ci`, `perf`.
+
+Examples:
+
+```
+feat(agents): add bulk tag assignment
+fix(webhooks): prevent duplicate delivery on retry
+docs: update architecture diagram
+chore: upgrade vitest to v4
+```
+
+## Running Checks
+
+Before submitting a pull request, make sure all checks pass locally:
+
+| Command                | Purpose                      |
+| ---------------------- | ---------------------------- |
+| `npm test`             | Run the test suite (Vitest)  |
+| `npm run lint`         | Lint the codebase (ESLint)   |
+| `npm run typecheck`    | TypeScript type checking     |
+| `npm run format`       | Auto-format with Prettier    |
+| `npm run format:check` | Verify formatting is correct |
+
+A pre-commit hook (via Husky + lint-staged) will automatically format staged files when you commit.
+
+## Pull Request Process
+
+1. **Create a branch** from `main` using the naming convention above.
+2. **Make your changes** in small, focused commits.
+3. **Run all checks** locally (tests, lint, typecheck, format).
+4. **Push your branch** to your fork.
+5. **Open a pull request** against the `main` branch of the upstream repository.
+6. **Fill out the PR template** with a clear description of what changed and why.
+7. **Address review feedback** promptly. Push additional commits rather than force-pushing.
+
+### What we look for in a PR
+
+- All CI checks pass.
+- New features include tests.
+- No unrelated changes are bundled in.
+- Code follows existing patterns and conventions.
+
+## Code Style
+
+- **Prettier** handles all formatting automatically. Do not override Prettier rules.
+- Follow existing patterns in the codebase. If you are unsure about a convention, look at similar files for guidance.
+- Use TypeScript strictly -- avoid `any` types where possible.
+- Colocate tests next to the files they test (e.g., `foo.ts` and `foo.test.ts` in the same directory).
+- React components use functional components with hooks.
+- Server Actions live in `actions.ts` files alongside their route pages.
+
+---
+
+If you have questions, feel free to open a discussion or reach out via GitHub Issues. We appreciate every contribution!
