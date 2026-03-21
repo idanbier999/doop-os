@@ -1,20 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { useSupabase } from "@/hooks/use-supabase";
 import { useWorkspace } from "@/contexts/workspace-context";
 import { Button } from "@/components/ui/button";
+import { addTaskComment } from "@/app/dashboard/tasks/actions";
 
 interface CommentFormProps {
   taskId: string;
 }
 
 export function CommentForm({ taskId }: CommentFormProps) {
-  const supabase = useSupabase();
   const [content, setContent] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const { workspaceId, userId } = useWorkspace();
+  const { workspaceId } = useWorkspace();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,22 +22,18 @@ export function CommentForm({ taskId }: CommentFormProps) {
 
     setSubmitting(true);
     try {
-      await supabase.from("task_comments").insert({
-        task_id: taskId,
-        workspace_id: workspaceId,
-        user_id: userId,
+      const result = await addTaskComment({
+        taskId,
+        workspaceId,
         content: trimmed,
       });
 
-      await supabase.from("activity_log").insert({
-        workspace_id: workspaceId,
-        user_id: userId,
-        action: "task_comment",
-        details: { task_id: taskId },
-      });
-
-      setError("");
-      setContent("");
+      if (!result.success) {
+        setError(result.error ?? "Failed to send comment. Please try again.");
+      } else {
+        setError("");
+        setContent("");
+      }
     } catch {
       setError("Failed to send comment. Please try again.");
     } finally {

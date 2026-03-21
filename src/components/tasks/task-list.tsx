@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { useWorkspace } from "@/contexts/workspace-context";
-import { useRealtime } from "@/hooks/use-realtime";
+import { useRealtimeEvents } from "@/hooks/use-realtime-events";
 import { Table, Thead, Tbody, Tr, Th, Td } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -14,7 +14,7 @@ interface TaskListProps {
   initialTasks: Task[];
 }
 
-function formatDate(dateStr: string | null) {
+function formatDate(dateStr: string | Date | null) {
   if (!dateStr) return "-";
   return new Date(dateStr).toLocaleDateString("en-US", {
     month: "short",
@@ -28,32 +28,27 @@ export function TaskList({ initialTasks }: TaskListProps) {
   const { workspaceId } = useWorkspace();
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
 
-  const handlePayload = useCallback(
-    (payload: {
-      eventType: string;
-      new: Record<string, unknown>;
-      old: Record<string, unknown>;
-    }) => {
-      if (payload.eventType === "INSERT") {
-        const newTask = payload.new as unknown as Task;
-        if (newTask.workspace_id === workspaceId) {
+  const handleEvent = useCallback(
+    (event: { event: string; new?: Record<string, unknown>; old?: Record<string, unknown> }) => {
+      if (event.event === "INSERT") {
+        const newTask = event.new as unknown as Task;
+        if (newTask.workspaceId === workspaceId) {
           setTasks((prev) => [newTask, ...prev]);
         }
-      } else if (payload.eventType === "UPDATE") {
-        const updated = payload.new as unknown as Task;
+      } else if (event.event === "UPDATE") {
+        const updated = event.new as unknown as Task;
         setTasks((prev) => prev.map((t) => (t.id === updated.id ? { ...t, ...updated } : t)));
-      } else if (payload.eventType === "DELETE") {
-        const deleted = payload.old as unknown as { id: string };
+      } else if (event.event === "DELETE") {
+        const deleted = event.old as unknown as { id: string };
         setTasks((prev) => prev.filter((t) => t.id !== deleted.id));
       }
     },
     [workspaceId]
   );
 
-  useRealtime({
+  useRealtimeEvents({
     table: "tasks",
-    filter: `workspace_id=eq.${workspaceId}`,
-    onPayload: handlePayload,
+    onEvent: handleEvent,
   });
 
   if (tasks.length === 0) {
@@ -89,7 +84,7 @@ export function TaskList({ initialTasks }: TaskListProps) {
               <Badge variant="priority" value={task.priority} />
             </Td>
             <Td>{task.agents?.name || "-"}</Td>
-            <Td>{formatDate(task.created_at)}</Td>
+            <Td>{formatDate(task.createdAt)}</Td>
           </Tr>
         ))}
       </Tbody>

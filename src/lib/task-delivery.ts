@@ -1,4 +1,6 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { getDb } from "@/lib/db/client";
+import { agents, tasks, projects } from "@/lib/db/schema";
+import { eq, and, inArray } from "drizzle-orm";
 import { dispatchToAgent } from "@/lib/webhook-dispatch";
 
 export interface DeliveryResult {
@@ -13,35 +15,64 @@ export async function deliverTaskToAgent(
   agentId: string,
   workspaceId: string
 ): Promise<DeliveryResult> {
-  const supabase = createAdminClient();
+  const db = getDb();
 
   // Fetch agent
-  const { data: agent, error: agentError } = await supabase
-    .from("agents")
-    .select("id, webhook_url")
-    .eq("id", agentId)
-    .single();
+  const agentRows = await db
+    .select({ id: agents.id, webhookUrl: agents.webhookUrl })
+    .from(agents)
+    .where(eq(agents.id, agentId))
+    .limit(1);
 
-  if (agentError || !agent) {
+  const agent = agentRows[0];
+  if (!agent) {
     return { success: false, method: "queue", error: "Agent not found" };
   }
 
   // Fetch task with project context, scoped to workspace for access control
-  const { data: task, error: taskError } = await supabase
-    .from("tasks")
-    .select(
-      "id, title, description, priority, status, project:projects(id, name, instructions, orchestration_mode)"
-    )
-    .eq("id", taskId)
-    .eq("workspace_id", workspaceId)
-    .single();
+  const taskRows = await db
+    .select({
+      id: tasks.id,
+      title: tasks.title,
+      description: tasks.description,
+      priority: tasks.priority,
+      status: tasks.status,
+      projectId: tasks.projectId,
+    })
+    .from(tasks)
+    .where(and(eq(tasks.id, taskId), eq(tasks.workspaceId, workspaceId)))
+    .limit(1);
 
-  if (taskError || !task) {
+  const task = taskRows[0];
+  if (!task) {
     return { success: false, method: "queue", error: "Task not found" };
   }
 
-  // Has webhook_url → push via webhook
-  if (agent.webhook_url) {
+  // Fetch project context if available
+  let project: {
+    id: string;
+    name: string;
+    instructions: string | null;
+    orchestrationMode: string;
+  } | null = null;
+
+  if (task.projectId) {
+    const projectRows = await db
+      .select({
+        id: projects.id,
+        name: projects.name,
+        instructions: projects.instructions,
+        orchestrationMode: projects.orchestrationMode,
+      })
+      .from(projects)
+      .where(eq(projects.id, task.projectId))
+      .limit(1);
+
+    project = projectRows[0] ?? null;
+  }
+
+  // Has webhook_url -> push via webhook
+  if (agent.webhookUrl) {
     const payload = {
       event: "task.assigned",
       timestamp: new Date().toISOString(),
@@ -52,7 +83,7 @@ export async function deliverTaskToAgent(
         priority: task.priority,
         status: task.status,
       },
-      project: task.project ?? null,
+      project,
       agent: { id: agentId },
     };
 
@@ -62,11 +93,14 @@ export async function deliverTaskToAgent(
       // Update task status to in_progress with optimistic lock
       // Note: Even if this update fails (0 rows due to race condition), we still
       // return success because the webhook was already sent and cannot be recalled.
-      await supabase
-        .from("tasks")
-        .update({ status: "in_progress", agent_id: agentId, updated_at: new Date().toISOString() })
-        .eq("id", taskId)
-        .in("status", ["pending", "waiting_on_agent"]);
+      await db
+        .update(tasks)
+        .set({
+          status: "in_progress",
+          agentId,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(tasks.id, taskId), inArray(tasks.status, ["pending", "waiting_on_agent"])));
 
       return { success: true, method: "webhook", deliveryId: result.deliveryId };
     }
@@ -74,12 +108,15 @@ export async function deliverTaskToAgent(
     return { success: false, method: "webhook", error: result.error };
   }
 
-  // No webhook_url → queue-based delivery (polling)
-  await supabase
-    .from("tasks")
-    .update({ status: "waiting_on_agent", agent_id: agentId, updated_at: new Date().toISOString() })
-    .eq("id", taskId)
-    .in("status", ["pending", "waiting_on_agent"]);
+  // No webhook_url -> queue-based delivery (polling)
+  await db
+    .update(tasks)
+    .set({
+      status: "waiting_on_agent",
+      agentId,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(tasks.id, taskId), inArray(tasks.status, ["pending", "waiting_on_agent"])));
 
   return { success: true, method: "queue" };
 }
@@ -90,19 +127,24 @@ export async function notifyLeadAgent(
   payload: Record<string, unknown>
 ): Promise<void> {
   try {
-    const supabase = createAdminClient();
+    const db = getDb();
 
-    const { data: project } = await supabase
-      .from("projects")
-      .select("id, lead_agent_id, orchestration_mode")
-      .eq("id", projectId)
-      .single();
+    const projectRows = await db
+      .select({
+        id: projects.id,
+        leadAgentId: projects.leadAgentId,
+        orchestrationMode: projects.orchestrationMode,
+      })
+      .from(projects)
+      .where(eq(projects.id, projectId))
+      .limit(1);
 
-    if (!project || project.orchestration_mode !== "lead_agent" || !project.lead_agent_id) {
+    const project = projectRows[0];
+    if (!project || project.orchestrationMode !== "lead_agent" || !project.leadAgentId) {
       return;
     }
 
-    await dispatchToAgent(project.lead_agent_id, { event, project_id: projectId, ...payload });
+    await dispatchToAgent(project.leadAgentId, { event, project_id: projectId, ...payload });
   } catch (err) {
     console.warn("notifyLeadAgent failed:", err);
   }

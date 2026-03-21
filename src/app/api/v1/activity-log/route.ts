@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { authenticateAgent } from "@/lib/api-auth";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { getDb } from "@/lib/db/client";
+import { activityLog } from "@/lib/db/schema";
 import { withRateLimit } from "@/lib/api-rate-limit";
-import type { Json } from "@/lib/database.types";
 
 const activityLogBodySchema = z
   .object({
@@ -34,16 +34,16 @@ async function handlePost(request: NextRequest) {
   }
 
   const { action, details } = parsed.data;
-  const supabase = createAdminClient();
+  const db = getDb();
 
-  const { error } = await supabase.from("activity_log").insert({
-    workspace_id: agent.workspace_id,
-    agent_id: agent.id,
-    action,
-    details: (details as Json) ?? null,
-  });
-
-  if (error) {
+  try {
+    await db.insert(activityLog).values({
+      workspaceId: agent.workspaceId,
+      agentId: agent.id,
+      action,
+      details: details ?? null,
+    });
+  } catch {
     return NextResponse.json({ error: "Failed to log activity" }, { status: 500 });
   }
 

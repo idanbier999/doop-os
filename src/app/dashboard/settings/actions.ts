@@ -1,41 +1,48 @@
 "use server";
 
 import { createHmac } from "crypto";
-import { getAuthenticatedSupabase } from "@/lib/supabase/server-with-auth";
+import { requireAuth } from "@/lib/auth/session";
+import { requireWorkspaceMember, requireWorkspaceAdmin } from "@/lib/db/auth";
+import { getDb } from "@/lib/db/client";
+import { agents, notificationSettings, workspaces } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 
 export async function testWebhook(agentId: string, workspaceId: string) {
   try {
-    const { user, supabase } = await getAuthenticatedSupabase();
-    if (!user || !supabase) {
+    let user;
+    try {
+      user = await requireAuth();
+    } catch {
       return { success: false, error: "Not authenticated" };
     }
 
-    // Authorize — confirm user is member of workspace
-    const { data: member, error: memberError } = await supabase
-      .from("workspace_members")
-      .select("role")
-      .eq("workspace_id", workspaceId)
-      .eq("user_id", user.id)
-      .single();
-
-    if (memberError || !member) {
+    // Authorize -- confirm user is member of workspace
+    try {
+      await requireWorkspaceMember(user.id, workspaceId);
+    } catch {
       return { success: false, error: "Not a member of this workspace" };
     }
 
-    // Fetch agent webhook config
-    const { data: agent, error: agentError } = await supabase
-      .from("agents")
-      .select("webhook_url, webhook_secret, workspace_id")
-      .eq("id", agentId)
-      .single();
+    const db = getDb();
 
-    if (agentError || !agent) {
+    // Fetch agent webhook config
+    const [agent] = await db
+      .select({
+        webhookUrl: agents.webhookUrl,
+        webhookSecret: agents.webhookSecret,
+        workspaceId: agents.workspaceId,
+      })
+      .from(agents)
+      .where(eq(agents.id, agentId))
+      .limit(1);
+
+    if (!agent) {
       return { success: false, error: "Agent not found" };
     }
-    if (agent.workspace_id !== workspaceId) {
+    if (agent.workspaceId !== workspaceId) {
       return { success: false, error: "Agent does not belong to this workspace" };
     }
-    if (!agent.webhook_url?.trim()) {
+    if (!agent.webhookUrl?.trim()) {
       return { success: false, error: "No webhook URL configured for this agent" };
     }
 
@@ -49,14 +56,14 @@ export async function testWebhook(agentId: string, workspaceId: string) {
       "Content-Type": "application/json",
     };
 
-    if (agent.webhook_secret) {
-      const signature = createHmac("sha256", agent.webhook_secret)
+    if (agent.webhookSecret) {
+      const signature = createHmac("sha256", agent.webhookSecret)
         .update(JSON.stringify(payload))
         .digest("hex");
       headers["X-Doop-Signature"] = signature;
     }
 
-    const response = await fetch(agent.webhook_url, {
+    const response = await fetch(agent.webhookUrl, {
       method: "POST",
       headers,
       body: JSON.stringify(payload),
@@ -81,49 +88,48 @@ export async function testWebhook(agentId: string, workspaceId: string) {
 
 export async function testSlackWebhook(workspaceId: string) {
   try {
-    const { user, supabase } = await getAuthenticatedSupabase();
-    if (!user || !supabase) {
+    let user;
+    try {
+      user = await requireAuth();
+    } catch {
       return { success: false, error: "Not authenticated" };
     }
 
-    // Authorize — confirm user is owner or admin
-    const { data: member, error: memberError } = await supabase
-      .from("workspace_members")
-      .select("role")
-      .eq("workspace_id", workspaceId)
-      .eq("user_id", user.id)
-      .single();
-
-    if (memberError || !member) {
+    // Authorize -- confirm user is owner or admin
+    try {
+      await requireWorkspaceAdmin(user.id, workspaceId);
+    } catch {
       return { success: false, error: "Not a member of this workspace" };
     }
-    if (member.role !== "owner" && member.role !== "admin") {
-      return { success: false, error: "Insufficient permissions" };
-    }
+
+    const db = getDb();
 
     // Fetch notification settings
-    const { data: settings, error: settingsError } = await supabase
-      .from("notification_settings")
-      .select("slack_enabled, slack_webhook_url")
-      .eq("workspace_id", workspaceId)
-      .single();
+    const [settings] = await db
+      .select({
+        slackEnabled: notificationSettings.slackEnabled,
+        slackWebhookUrl: notificationSettings.slackWebhookUrl,
+      })
+      .from(notificationSettings)
+      .where(eq(notificationSettings.workspaceId, workspaceId))
+      .limit(1);
 
-    if (settingsError || !settings) {
+    if (!settings) {
       return { success: false, error: "Notification settings not found" };
     }
-    if (!settings.slack_enabled) {
+    if (!settings.slackEnabled) {
       return { success: false, error: "Slack notifications are disabled" };
     }
-    if (!settings.slack_webhook_url?.trim()) {
+    if (!settings.slackWebhookUrl?.trim()) {
       return { success: false, error: "Webhook URL is empty" };
     }
 
     // Fetch workspace name for the test message
-    const { data: workspace } = await supabase
-      .from("workspaces")
-      .select("name")
-      .eq("id", workspaceId)
-      .single();
+    const [workspace] = await db
+      .select({ name: workspaces.name })
+      .from(workspaces)
+      .where(eq(workspaces.id, workspaceId))
+      .limit(1);
 
     const workspaceName = workspace?.name ?? "Unknown workspace";
 
@@ -166,7 +172,7 @@ export async function testSlackWebhook(workspaceId: string) {
     };
 
     // Send to Slack
-    const response = await fetch(settings.slack_webhook_url, {
+    const response = await fetch(settings.slackWebhookUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -186,5 +192,152 @@ export async function testSlackWebhook(workspaceId: string) {
       success: false,
       error: err instanceof Error ? err.message : "Unknown error",
     };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Notification Settings
+// ---------------------------------------------------------------------------
+
+export async function getNotificationSettings(workspaceId: string) {
+  try {
+    let user;
+    try {
+      user = await requireAuth();
+    } catch {
+      return { settings: null, error: "Not authenticated" };
+    }
+
+    try {
+      await requireWorkspaceMember(user.id, workspaceId);
+    } catch {
+      return { settings: null, error: "Not a member of this workspace" };
+    }
+
+    const db = getDb();
+
+    const [row] = await db
+      .select({
+        slackEnabled: notificationSettings.slackEnabled,
+        slackWebhookUrl: notificationSettings.slackWebhookUrl,
+        notifyOnProblemSeverity: notificationSettings.notifyOnProblemSeverity,
+      })
+      .from(notificationSettings)
+      .where(eq(notificationSettings.workspaceId, workspaceId))
+      .limit(1);
+
+    return {
+      settings: row ?? {
+        slackEnabled: false,
+        slackWebhookUrl: null,
+        notifyOnProblemSeverity: ["high", "critical"],
+      },
+    };
+  } catch (err) {
+    return {
+      settings: null,
+      error: err instanceof Error ? err.message : "Unknown error",
+    };
+  }
+}
+
+export async function saveNotificationSettings(
+  workspaceId: string,
+  data: {
+    slackEnabled: boolean;
+    slackWebhookUrl: string | null;
+    notifyOnProblemSeverity: string[];
+  }
+) {
+  try {
+    let user;
+    try {
+      user = await requireAuth();
+    } catch {
+      return { error: "Not authenticated" };
+    }
+
+    try {
+      await requireWorkspaceAdmin(user.id, workspaceId);
+    } catch {
+      return { error: "Only admins and owners can update notification settings" };
+    }
+
+    const db = getDb();
+
+    // Upsert: try update first, insert if not found
+    const [existing] = await db
+      .select({ id: notificationSettings.id })
+      .from(notificationSettings)
+      .where(eq(notificationSettings.workspaceId, workspaceId))
+      .limit(1);
+
+    if (existing) {
+      await db
+        .update(notificationSettings)
+        .set({
+          slackEnabled: data.slackEnabled,
+          slackWebhookUrl: data.slackWebhookUrl,
+          notifyOnProblemSeverity: data.notifyOnProblemSeverity,
+          updatedAt: new Date(),
+        })
+        .where(eq(notificationSettings.workspaceId, workspaceId));
+    } else {
+      await db.insert(notificationSettings).values({
+        workspaceId,
+        slackEnabled: data.slackEnabled,
+        slackWebhookUrl: data.slackWebhookUrl,
+        notifyOnProblemSeverity: data.notifyOnProblemSeverity,
+      });
+    }
+
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Unknown error" };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Workspace Settings
+// ---------------------------------------------------------------------------
+
+export async function updateWorkspaceSettings(
+  workspaceId: string,
+  data: { name: string; slug: string }
+) {
+  try {
+    let user;
+    try {
+      user = await requireAuth();
+    } catch {
+      return { error: "Not authenticated" };
+    }
+
+    try {
+      await requireWorkspaceAdmin(user.id, workspaceId);
+    } catch {
+      return { error: "Only admins and owners can update workspace settings" };
+    }
+
+    if (!data.name.trim()) {
+      return { error: "Workspace name is required" };
+    }
+    if (!data.slug.trim()) {
+      return { error: "Workspace slug is required" };
+    }
+
+    const db = getDb();
+
+    await db
+      .update(workspaces)
+      .set({
+        name: data.name.trim(),
+        slug: data.slug.trim(),
+      })
+      .where(eq(workspaces.id, workspaceId));
+
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Unknown error" };
   }
 }

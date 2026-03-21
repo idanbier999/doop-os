@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { useSupabase } from "@/hooks/use-supabase";
 import { useWorkspace } from "@/contexts/workspace-context";
 import { useRouter } from "next/navigation";
 
@@ -21,8 +20,6 @@ const TYPE_CONFIG: Record<ResultType, { icon: string; label: string }> = {
   task: { icon: "\u2610", label: "Tasks" },
 };
 
-const RESULT_LIMIT = 5;
-
 interface SearchCommandProps {
   externalOpen?: boolean;
   onExternalOpenHandled?: () => void;
@@ -41,7 +38,6 @@ export function SearchCommand({ externalOpen, onExternalOpenHandled }: SearchCom
 
   const { workspaceId } = useWorkspace();
   const router = useRouter();
-  const supabase = useSupabase();
 
   const openSearch = useCallback(() => {
     setOpen(true);
@@ -85,7 +81,6 @@ export function SearchCommand({ externalOpen, onExternalOpenHandled }: SearchCom
     if (!dialog) return;
     if (open) {
       dialog.showModal();
-      // Focus input after dialog opens
       setTimeout(() => inputRef.current?.focus(), 0);
     } else {
       dialog.close();
@@ -101,7 +96,7 @@ export function SearchCommand({ externalOpen, onExternalOpenHandled }: SearchCom
     return () => dialog.removeEventListener("close", handleClose);
   }, [closeSearch]);
 
-  // Debounced search
+  // Debounced search via API
   useEffect(() => {
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
@@ -119,102 +114,19 @@ export function SearchCommand({ externalOpen, onExternalOpenHandled }: SearchCom
     setLoading(true);
 
     debounceRef.current = setTimeout(async () => {
-      const pattern = `%${query.trim()}%`;
-      const allResults: SearchResult[] = [];
-
-      // Search agents (name and tags)
-      const { data: agents } = await supabase
-        .from("agents")
-        .select("id, name, agent_type, tags")
-        .eq("workspace_id", workspaceId)
-        .ilike("name", pattern)
-        .limit(RESULT_LIMIT);
-
-      if (agents) {
-        for (const a of agents) {
-          allResults.push({
-            id: a.id,
-            type: "agent",
-            title: a.name,
-            subtitle: a.agent_type ?? undefined,
-            href: `/dashboard/agents/${a.id}`,
-          });
+      try {
+        const res = await fetch(
+          `/api/internal/search?q=${encodeURIComponent(query.trim())}&workspace=${workspaceId}`
+        );
+        if (res.ok) {
+          const data = await res.json();
+          setResults(data.results ?? []);
+        } else {
+          setResults([]);
         }
+      } catch {
+        setResults([]);
       }
-
-      // Also search agents by tags (separate query since ilike on arrays is tricky)
-      const { data: agentsByTag } = await supabase
-        .from("agents")
-        .select("id, name, agent_type, tags")
-        .eq("workspace_id", workspaceId)
-        .contains("tags", [query.trim()])
-        .limit(RESULT_LIMIT);
-
-      if (agentsByTag) {
-        const existingIds = new Set(allResults.map((r) => r.id));
-        for (const a of agentsByTag) {
-          if (!existingIds.has(a.id)) {
-            allResults.push({
-              id: a.id,
-              type: "agent",
-              title: a.name,
-              subtitle: a.tags?.join(", ") ?? undefined,
-              href: `/dashboard/agents/${a.id}`,
-            });
-          }
-        }
-      }
-
-      // Problems don't have workspace_id directly — filter via agent IDs.
-      const { data: workspaceAgents } = await supabase
-        .from("agents")
-        .select("id")
-        .eq("workspace_id", workspaceId);
-
-      const agentIds = workspaceAgents?.map((a) => a.id) ?? [];
-
-      if (agentIds.length > 0) {
-        const { data: problemResults } = await supabase
-          .from("problems")
-          .select("id, title, severity")
-          .in("agent_id", agentIds)
-          .ilike("title", pattern)
-          .limit(RESULT_LIMIT);
-
-        if (problemResults) {
-          for (const p of problemResults) {
-            allResults.push({
-              id: p.id,
-              type: "problem",
-              title: p.title,
-              subtitle: p.severity,
-              href: `/dashboard/problems`,
-            });
-          }
-        }
-      }
-
-      // Search tasks
-      const { data: tasks } = await supabase
-        .from("tasks")
-        .select("id, title, status")
-        .eq("workspace_id", workspaceId)
-        .ilike("title", pattern)
-        .limit(RESULT_LIMIT);
-
-      if (tasks) {
-        for (const t of tasks) {
-          allResults.push({
-            id: t.id,
-            type: "task",
-            title: t.title,
-            subtitle: t.status,
-            href: `/dashboard/tasks`,
-          });
-        }
-      }
-
-      setResults(allResults);
       setSelectedIndex(0);
       setLoading(false);
     }, 300);

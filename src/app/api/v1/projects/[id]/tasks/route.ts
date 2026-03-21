@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { authenticateAgent } from "@/lib/api-auth";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { getDb } from "@/lib/db/client";
+import { tasks, projects, projectAgents, taskDependencies, activityLog } from "@/lib/db/schema";
+import { eq, and, inArray } from "drizzle-orm";
 import { withRateLimit } from "@/lib/api-rate-limit";
-import type { Json } from "@/lib/database.types";
 
 const createTaskBodySchema = z
   .object({
@@ -39,65 +40,74 @@ async function handlePost(request: NextRequest, context?: unknown) {
   }
 
   const { title, description, priority, depends_on } = parsed.data;
-  const supabase = createAdminClient();
+  const db = getDb();
 
   // Verify project exists in workspace
-  const { data: project, error: projectError } = await supabase
-    .from("projects")
-    .select("id")
-    .eq("id", projectId)
-    .eq("workspace_id", agent.workspace_id)
-    .single();
+  const projectRows = await db
+    .select({ id: projects.id })
+    .from(projects)
+    .where(and(eq(projects.id, projectId), eq(projects.workspaceId, agent.workspaceId)))
+    .limit(1);
 
-  if (projectError || !project) {
+  if (projectRows.length === 0) {
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }
 
   // Verify caller is lead of this project
-  const { data: membership, error: memberError } = await supabase
-    .from("project_agents")
-    .select("role")
-    .eq("project_id", projectId)
-    .eq("agent_id", agent.id)
-    .single();
+  const membershipRows = await db
+    .select({ role: projectAgents.role })
+    .from(projectAgents)
+    .where(and(eq(projectAgents.projectId, projectId), eq(projectAgents.agentId, agent.id)))
+    .limit(1);
 
-  if (memberError || !membership || membership.role !== "lead") {
+  const membership = membershipRows[0];
+  if (!membership || membership.role !== "lead") {
     return NextResponse.json({ error: "Only project leads can create tasks" }, { status: 403 });
   }
 
   // Insert task
-  const { data: task, error: taskError } = await supabase
-    .from("tasks")
-    .insert({
-      workspace_id: agent.workspace_id,
-      project_id: projectId,
-      title,
-      description: description ?? null,
-      priority,
-      status: "pending",
-      agent_id: null,
-    })
-    .select("id, title, status")
-    .single();
+  let task;
+  try {
+    const result = await db
+      .insert(tasks)
+      .values({
+        workspaceId: agent.workspaceId,
+        projectId,
+        title,
+        description: description ?? null,
+        priority,
+        status: "pending",
+        agentId: null,
+      })
+      .returning({
+        id: tasks.id,
+        title: tasks.title,
+        status: tasks.status,
+      });
 
-  if (taskError || !task) {
+    task = result[0];
+  } catch {
+    return NextResponse.json({ error: "Failed to create task" }, { status: 500 });
+  }
+
+  if (!task) {
     return NextResponse.json({ error: "Failed to create task" }, { status: 500 });
   }
 
   // Handle dependencies
   if (depends_on && depends_on.length > 0) {
     // Validate all dependency task IDs exist in the same project
-    const { data: depTasks, error: depError } = await supabase
-      .from("tasks")
-      .select("id")
-      .in("id", depends_on)
-      .eq("project_id", projectId);
-
-    if (depError) {
+    let depTasks;
+    try {
+      depTasks = await db
+        .select({ id: tasks.id })
+        .from(tasks)
+        .where(and(inArray(tasks.id, depends_on), eq(tasks.projectId, projectId)));
+    } catch {
       return NextResponse.json({ error: "Failed to validate dependencies" }, { status: 500 });
     }
 
-    const foundIds = new Set((depTasks ?? []).map((t: { id: string }) => t.id));
+    const foundIds = new Set(depTasks.map((t) => t.id));
     const invalidIds = depends_on.filter((depId) => !foundIds.has(depId));
 
     if (invalidIds.length > 0) {
@@ -108,16 +118,16 @@ async function handlePost(request: NextRequest, context?: unknown) {
     }
 
     const depRows = depends_on.map((depId) => ({
-      task_id: task.id,
-      depends_on_task_id: depId,
+      taskId: task.id,
+      dependsOnTaskId: depId,
     }));
 
-    await supabase.from("task_dependencies").insert(depRows);
+    await db.insert(taskDependencies).values(depRows);
   }
 
-  await supabase.from("activity_log").insert({
-    workspace_id: agent.workspace_id,
-    agent_id: agent.id,
+  await db.insert(activityLog).values({
+    workspaceId: agent.workspaceId,
+    agentId: agent.id,
     action: "task_created",
     details: {
       task_id: task.id,
@@ -125,7 +135,7 @@ async function handlePost(request: NextRequest, context?: unknown) {
       title,
       priority,
       depends_on: depends_on ?? [],
-    } as unknown as Json,
+    },
   });
 
   return NextResponse.json(

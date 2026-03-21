@@ -9,7 +9,7 @@ interface TaskCardProps {
   problemCount?: number;
 }
 
-function formatDate(dateStr: string | null) {
+function formatDate(dateStr: string | Date | null) {
   if (!dateStr) return "";
   const d = new Date(dateStr);
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
@@ -61,7 +61,7 @@ export function TaskCard({ task, onClick, problemCount }: TaskCardProps) {
           );
         })()}
       </div>
-      <div className="mt-2 text-xs text-mac-gray">{formatDate(task.created_at)}</div>
+      <div className="mt-2 text-xs text-mac-gray">{formatDate(task.createdAt)}</div>
     </div>
   );
 }

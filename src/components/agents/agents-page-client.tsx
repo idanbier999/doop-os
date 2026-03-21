@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useWorkspace } from "@/contexts/workspace-context";
-import { useRealtime } from "@/hooks/use-realtime";
+import { useRealtimeEvents } from "@/hooks/use-realtime-events";
 import { AgentCard } from "@/components/dashboard/agent-card";
 import { TagFilter } from "./tag-filter";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -126,32 +126,27 @@ export function AgentsPageClient({ initialAgents, agentStats }: AgentsPageClient
     }
   }
 
-  const handleRealtimePayload = useCallback(
-    (payload: {
-      eventType: string;
-      new?: Record<string, unknown>;
-      old?: Record<string, unknown>;
-    }) => {
-      if (payload.eventType === "INSERT") {
-        const newAgent = payload.new as unknown as Agent;
-        if (newAgent.workspace_id === workspaceId) {
+  const handleRealtimeEvent = useCallback(
+    (event: { event: string; new?: Record<string, unknown>; old?: Record<string, unknown> }) => {
+      if (event.event === "INSERT") {
+        const newAgent = event.new as unknown as Agent;
+        if (newAgent.workspaceId === workspaceId) {
           setAgents((prev) => [...prev, newAgent].sort((a, b) => a.name.localeCompare(b.name)));
         }
-      } else if (payload.eventType === "UPDATE") {
-        const updated = payload.new as unknown as Agent;
+      } else if (event.event === "UPDATE") {
+        const updated = event.new as unknown as Agent;
         setAgents((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
-      } else if (payload.eventType === "DELETE") {
-        const deleted = payload.old as unknown as { id: string };
+      } else if (event.event === "DELETE") {
+        const deleted = event.old as unknown as { id: string };
         setAgents((prev) => prev.filter((a) => a.id !== deleted.id));
       }
     },
     [workspaceId]
   );
 
-  useRealtime({
+  useRealtimeEvents({
     table: "agents",
-    filter: `workspace_id=eq.${workspaceId}`,
-    onPayload: handleRealtimePayload,
+    onEvent: handleRealtimeEvent,
   });
 
   const availableTags = useMemo(() => {

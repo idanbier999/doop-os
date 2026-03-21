@@ -1,12 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
-import {
-  createMockSupabaseClient,
-  createTableMocks,
-  mockResolve,
-  mockReject,
-  MockSupabaseChain,
-} from "@/__tests__/mocks/supabase";
+import { createMockDb } from "@/__tests__/mocks/drizzle";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -14,16 +8,18 @@ import {
 
 const mockAgent = {
   id: "agent-001",
-  workspace_id: "ws-001",
+  workspaceId: "ws-001",
   name: "test-agent",
 };
+
+const { mockDb, pushResult, pushError, reset } = createMockDb();
 
 vi.mock("@/lib/api-auth", () => ({
   authenticateAgent: vi.fn(),
 }));
 
-vi.mock("@/lib/supabase/admin", () => ({
-  createAdminClient: vi.fn(),
+vi.mock("@/lib/db/client", () => ({
+  getDb: () => mockDb,
 }));
 
 vi.mock("@/lib/api-rate-limit", () => ({
@@ -31,20 +27,17 @@ vi.mock("@/lib/api-rate-limit", () => ({
 }));
 
 import { authenticateAgent } from "@/lib/api-auth";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { POST } from "./route";
 
 // ---------------------------------------------------------------------------
 // Setup
 // ---------------------------------------------------------------------------
 
-let mockSupabase: ReturnType<typeof createMockSupabaseClient>;
 const mockContext = { params: Promise.resolve({ id: "task-001" }) };
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockSupabase = createMockSupabaseClient();
-  (createAdminClient as ReturnType<typeof vi.fn>).mockReturnValue(mockSupabase.client);
+  reset();
   (authenticateAgent as ReturnType<typeof vi.fn>).mockResolvedValue(mockAgent);
 });
 
@@ -88,7 +81,8 @@ describe("POST /api/v1/tasks/:id/comments", () => {
   });
 
   it("returns 404 when task does not exist", async () => {
-    mockReject(mockSupabase.chain, { message: "not found", code: "PGRST116" });
+    // db.select() for task verification → empty (not found)
+    pushResult([]);
 
     const request = new NextRequest("http://localhost/api/v1/tasks/task-001/comments", {
       method: "POST",
@@ -101,19 +95,12 @@ describe("POST /api/v1/tasks/:id/comments", () => {
   });
 
   it("returns 201 with comment_id for valid request", async () => {
-    const tasksChain = createMockSupabaseClient().chain;
-    mockResolve(tasksChain, { id: "task-001" });
-
-    const commentsChain = createMockSupabaseClient().chain;
-    mockResolve(commentsChain, { id: "comment-001" });
-
-    const activityChain = createMockSupabaseClient().chain;
-
-    createTableMocks(mockSupabase.from, {
-      tasks: tasksChain,
-      task_comments: commentsChain,
-      activity_log: activityChain,
-    });
+    // db.select() for task verification → found
+    pushResult([{ id: "task-001" }]);
+    // db.insert(taskComments).returning() → comment
+    pushResult([{ id: "comment-001" }]);
+    // db.insert(activityLog) → activity log
+    pushResult([]);
 
     const request = new NextRequest("http://localhost/api/v1/tasks/task-001/comments", {
       method: "POST",

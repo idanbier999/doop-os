@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSupabase } from "@/hooks/use-supabase";
 import { useWorkspace } from "@/contexts/workspace-context";
 import { useNotifications } from "@/contexts/notification-context";
 import { Card, CardHeader, CardBody } from "@/components/ui/card";
@@ -12,15 +11,40 @@ import { Modal } from "@/components/ui/modal";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { ReassignOwnerModal } from "@/components/agents/reassign-owner-modal";
 import { testWebhook } from "@/app/dashboard/settings/actions";
-import { getWorkspaceMemberMap, type MemberInfo } from "@/lib/workspace-members";
+import {
+  getAgents,
+  getWorkspaceMembers,
+  updateAgent,
+  generateWebhookSecret,
+  deleteAgent,
+} from "@/app/dashboard/agents/actions";
+import type { MemberInfo } from "@/lib/workspace-members";
 import { Fragment } from "react";
-import type { Tables } from "@/lib/database.types";
 
-type Agent = Omit<Tables<"agents">, "api_key_hash">;
+/** Local agent type matching the Drizzle camelCase return shape from getAgents() */
+interface Agent {
+  id: string;
+  name: string;
+  agentType: string | null;
+  health: string;
+  stage: string;
+  platform: string | null;
+  description: string | null;
+  tags: string[] | null;
+  capabilities: string[] | null;
+  webhookUrl: string | null;
+  webhookSecret: string | null;
+  apiKeyPrefix: string;
+  ownerId: string | null;
+  lastSeenAt: Date | string | null;
+  metadata: unknown;
+  createdAt: Date | string | null;
+  updatedAt: Date | string | null;
+  workspaceId: string;
+}
 
 export function AgentsSettings() {
   const { workspaceId, userId, userRole } = useWorkspace();
-  const supabase = useSupabase();
   const { addToast } = useNotifications();
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -43,30 +67,28 @@ export function AgentsSettings() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [{ data }, members] = await Promise.all([
-        supabase
-          .from("agents")
-          .select(
-            "id, name, agent_type, health, stage, platform, description, tags, capabilities, webhook_url, webhook_secret, api_key_prefix, owner_id, last_seen_at, metadata, created_at, updated_at, workspace_id"
-          )
-          .eq("workspace_id", workspaceId)
-          .order("name"),
-        getWorkspaceMemberMap(supabase, workspaceId),
+      const [agentsResult, membersResult] = await Promise.all([
+        getAgents(workspaceId),
+        getWorkspaceMembers(workspaceId),
       ]);
       if (!cancelled) {
-        setAgents(data || []);
-        setMemberMap(members);
+        setAgents((agentsResult.agents as Agent[]) || []);
+        const map = new Map<string, MemberInfo>();
+        for (const m of membersResult.members) {
+          map.set(m.userId, m);
+        }
+        setMemberMap(map);
         setLoading(false);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [workspaceId, supabase]);
+  }, [workspaceId]);
 
   function canEditAgent(agent: Agent): boolean {
     if (isAdminOrOwner) return true;
-    return agent.owner_id === userId;
+    return agent.ownerId === userId;
   }
 
   function toggleSecretReveal(agentId: string) {
@@ -120,8 +142,8 @@ export function AgentsSettings() {
       .split(",")
       .map((t) => t.trim())
       .filter(Boolean);
-    const { error } = await supabase.from("agents").update({ tags: tagsArray }).eq("id", agentId);
-    if (!error) {
+    const result = await updateAgent({ agentId, workspaceId, tags: tagsArray });
+    if (result.success) {
       setAgents((prev) => prev.map((a) => (a.id === agentId ? { ...a, tags: tagsArray } : a)));
     }
     setEditingTags(null);
@@ -130,13 +152,10 @@ export function AgentsSettings() {
 
   async function handleSaveWebhookUrl(agentId: string) {
     const url = webhookInput.trim();
-    const { error } = await supabase
-      .from("agents")
-      .update({ webhook_url: url || null })
-      .eq("id", agentId);
-    if (!error) {
+    const result = await updateAgent({ agentId, workspaceId, webhookUrl: url || null });
+    if (result.success) {
       setAgents((prev) =>
-        prev.map((a) => (a.id === agentId ? { ...a, webhook_url: url || null } : a))
+        prev.map((a) => (a.id === agentId ? { ...a, webhookUrl: url || null } : a))
       );
     }
     setEditingWebhook(null);
@@ -144,14 +163,10 @@ export function AgentsSettings() {
   }
 
   async function handleGenerateSecret(agentId: string) {
-    const newSecret = crypto.randomUUID().replace(/-/g, "");
-    const { error } = await supabase
-      .from("agents")
-      .update({ webhook_secret: newSecret })
-      .eq("id", agentId);
-    if (!error) {
+    const result = await generateWebhookSecret(agentId, workspaceId);
+    if (result.success && result.secret) {
       setAgents((prev) =>
-        prev.map((a) => (a.id === agentId ? { ...a, webhook_secret: newSecret } : a))
+        prev.map((a) => (a.id === agentId ? { ...a, webhookSecret: result.secret! } : a))
       );
       addToast({
         type: "info",
@@ -190,11 +205,8 @@ export function AgentsSettings() {
       .split(",")
       .map((c) => c.trim())
       .filter(Boolean);
-    const { error } = await supabase
-      .from("agents")
-      .update({ capabilities: caps })
-      .eq("id", agentId);
-    if (!error) {
+    const result = await updateAgent({ agentId, workspaceId, capabilities: caps });
+    if (result.success) {
       setAgents((prev) => prev.map((a) => (a.id === agentId ? { ...a, capabilities: caps } : a)));
     }
     setEditingCapabilities(null);
@@ -205,7 +217,7 @@ export function AgentsSettings() {
     if (!deleteTarget) return;
     setDeleting(true);
 
-    await supabase.from("agents").delete().eq("id", deleteTarget.id);
+    await deleteAgent(deleteTarget.id, workspaceId);
 
     setAgents((prev) => prev.filter((a) => a.id !== deleteTarget.id));
     setDeleteTarget(null);
@@ -250,12 +262,12 @@ export function AgentsSettings() {
                         <Td>
                           <span className="text-mac-black font-medium">{agent.name}</span>
                         </Td>
-                        <Td>{agent.agent_type || "-"}</Td>
+                        <Td>{agent.agentType || "-"}</Td>
                         <Td>
                           <Badge variant="health" value={agent.health} />
                         </Td>
                         <Td>
-                          <span className="text-xs text-mac-gray">{ownerName(agent.owner_id)}</span>
+                          <span className="text-xs text-mac-gray">{ownerName(agent.ownerId)}</span>
                         </Td>
                         <Td>
                           {editingTags === agent.id ? (
@@ -306,7 +318,7 @@ export function AgentsSettings() {
                         </Td>
                         <Td>
                           <code className="text-xs text-mac-gray font-mono">
-                            {agent.api_key_prefix ? `${agent.api_key_prefix}...` : "No key"}
+                            {agent.apiKeyPrefix ? `${agent.apiKeyPrefix}...` : "No key"}
                           </code>
                         </Td>
                         <Td>
@@ -315,7 +327,7 @@ export function AgentsSettings() {
                             size="sm"
                             onClick={() => toggleWebhookExpand(agent.id)}
                           >
-                            {agent.webhook_url ? truncateUrl(agent.webhook_url) : "Configure"}{" "}
+                            {agent.webhookUrl ? truncateUrl(agent.webhookUrl) : "Configure"}{" "}
                             {expandedWebhook.has(agent.id) ? "▲" : "▼"}
                           </Button>
                         </Td>
@@ -381,19 +393,19 @@ export function AgentsSettings() {
                                 ) : (
                                   <div className="flex items-center gap-2">
                                     <code className="text-xs text-mac-gray font-mono">
-                                      {agent.webhook_url || "Not configured"}
+                                      {agent.webhookUrl || "Not configured"}
                                     </code>
                                     <Button
                                       variant="ghost"
                                       size="sm"
                                       onClick={() => {
                                         setEditingWebhook(agent.id);
-                                        setWebhookInput(agent.webhook_url || "");
+                                        setWebhookInput(agent.webhookUrl || "");
                                       }}
                                     >
                                       Edit
                                     </Button>
-                                    {agent.webhook_url && (
+                                    {agent.webhookUrl && (
                                       <Button
                                         variant="ghost"
                                         size="sm"
@@ -414,13 +426,13 @@ export function AgentsSettings() {
                                 </p>
                                 <div className="flex items-center gap-2">
                                   <code className="text-xs text-mac-gray font-mono">
-                                    {agent.webhook_secret
+                                    {agent.webhookSecret
                                       ? revealedSecrets.has(agent.id)
-                                        ? agent.webhook_secret
-                                        : maskSecret(agent.webhook_secret)
+                                        ? agent.webhookSecret
+                                        : maskSecret(agent.webhookSecret)
                                       : "Not set"}
                                   </code>
-                                  {agent.webhook_secret && (
+                                  {agent.webhookSecret && (
                                     <>
                                       <Button
                                         variant="ghost"
@@ -432,7 +444,7 @@ export function AgentsSettings() {
                                       <Button
                                         variant="ghost"
                                         size="sm"
-                                        onClick={() => handleCopySecret(agent.webhook_secret!)}
+                                        onClick={() => handleCopySecret(agent.webhookSecret!)}
                                       >
                                         Copy
                                       </Button>
@@ -538,7 +550,7 @@ export function AgentsSettings() {
           onClose={() => setReassignTarget(null)}
           agentId={reassignTarget.id}
           agentName={reassignTarget.name}
-          currentOwnerId={reassignTarget.owner_id}
+          currentOwnerId={reassignTarget.ownerId}
           workspaceId={workspaceId}
         />
       )}

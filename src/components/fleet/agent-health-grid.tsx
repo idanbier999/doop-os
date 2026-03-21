@@ -6,8 +6,7 @@ import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { HealthSparkline } from "@/components/agents/health-sparkline";
-import { useRealtime } from "@/hooks/use-realtime";
-import { useSupabase } from "@/hooks/use-supabase";
+import { useRealtimeEvents } from "@/hooks/use-realtime-events";
 import { useWorkspace } from "@/contexts/workspace-context";
 import { relativeTime } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -36,11 +35,11 @@ function sortAgents(agents: Agent[]): Agent[] {
     const oa = orderMap[a.health] ?? 4;
     const ob = orderMap[b.health] ?? 4;
     if (oa !== ob) return oa - ob;
-    // Within same health, sort by last_seen desc
-    if (!a.last_seen_at && !b.last_seen_at) return 0;
-    if (!a.last_seen_at) return 1;
-    if (!b.last_seen_at) return -1;
-    return new Date(b.last_seen_at).getTime() - new Date(a.last_seen_at).getTime();
+    // Within same health, sort by lastSeenAt desc
+    if (!a.lastSeenAt && !b.lastSeenAt) return 0;
+    if (!a.lastSeenAt) return 1;
+    if (!b.lastSeenAt) return -1;
+    return new Date(b.lastSeenAt).getTime() - new Date(a.lastSeenAt).getTime();
   });
 }
 
@@ -48,7 +47,7 @@ function getAgentStatusLine(agent: Agent, currentTasks: Record<string, string>):
   const task = currentTasks[agent.id];
   if (task) return `Working on: ${task}`;
   if (agent.health === "offline") {
-    const ago = relativeTime(agent.last_seen_at);
+    const ago = relativeTime(agent.lastSeenAt);
     return `Offline · ${ago}`;
   }
   return "Idle";
@@ -62,27 +61,22 @@ export function AgentHealthGrid({
   const [agents, setAgents] = useState<Agent[]>(initialAgents);
   const [currentTasks, setCurrentTasks] = useState<Record<string, string>>(agentCurrentTask);
   const { workspaceId } = useWorkspace();
-  const supabase = useSupabase();
   const router = useRouter();
 
-  const handleRealtimeChange = useCallback(
-    (payload: {
-      eventType: string;
-      new?: Record<string, unknown>;
-      old?: Record<string, unknown>;
-    }) => {
+  const handleAgentEvent = useCallback(
+    (event: { event: string; new?: Record<string, unknown>; old?: Record<string, unknown> }) => {
       setAgents((prev) => {
-        if (payload.eventType === "INSERT" && payload.new) {
-          const newAgent = payload.new as unknown as Agent;
+        if (event.event === "INSERT" && event.new) {
+          const newAgent = event.new as unknown as Agent;
           if (prev.some((a) => a.id === newAgent.id)) return prev;
           return [...prev, newAgent];
         }
-        if (payload.eventType === "UPDATE" && payload.new) {
-          const updated = payload.new as unknown as Agent;
+        if (event.event === "UPDATE" && event.new) {
+          const updated = event.new as unknown as Agent;
           return prev.map((a) => (a.id === updated.id ? updated : a));
         }
-        if (payload.eventType === "DELETE" && payload.old) {
-          const deleted = payload.old as unknown as Agent;
+        if (event.event === "DELETE" && event.old) {
+          const deleted = event.old as unknown as Agent;
           return prev.filter((a) => a.id !== deleted.id);
         }
         return prev;
@@ -91,27 +85,13 @@ export function AgentHealthGrid({
     []
   );
 
-  const refetchCurrentTasks = useCallback(async () => {
-    const agentIds = agents.map((a) => a.id);
-    if (agentIds.length === 0) return;
+  const handleTaskEvent = useCallback(() => {
+    // Re-fetch the page to get updated current tasks from server
+    router.refresh();
+  }, [router]);
 
-    const { data } = await supabase
-      .from("tasks")
-      .select("agent_id, title")
-      .in("agent_id", agentIds)
-      .in("status", ["in_progress", "waiting_on_agent"]);
-
-    if (data) {
-      const map: Record<string, string> = {};
-      for (const t of data) {
-        if (t.agent_id) map[t.agent_id] = t.title;
-      }
-      setCurrentTasks(map);
-    }
-  }, [agents, supabase]);
-
-  useRealtime({ table: "agents", onPayload: handleRealtimeChange });
-  useRealtime({ table: "tasks", onPayload: refetchCurrentTasks });
+  useRealtimeEvents({ table: "agents", onEvent: handleAgentEvent });
+  useRealtimeEvents({ table: "tasks", onEvent: handleTaskEvent });
 
   if (agents.length === 0) {
     return (
@@ -149,9 +129,9 @@ export function AgentHealthGrid({
                 {/* Name + type */}
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-sm font-medium text-mac-black truncate">{agent.name}</span>
-                  {agent.agent_type && (
+                  {agent.agentType && (
                     <Badge variant="stage" value="idle" className="shrink-0">
-                      {agent.agent_type}
+                      {agent.agentType}
                     </Badge>
                   )}
                 </div>
@@ -164,7 +144,7 @@ export function AgentHealthGrid({
                 {/* Last seen + sparkline */}
                 <div className="mt-2 flex items-center justify-between">
                   <span className="text-xs text-mac-gray font-[family-name:var(--font-pixel)]">
-                    {relativeTime(agent.last_seen_at)}
+                    {relativeTime(agent.lastSeenAt)}
                   </span>
                   {history.length > 0 && (
                     <HealthSparkline

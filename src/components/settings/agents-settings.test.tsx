@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import React from "react";
 import { render, screen } from "@testing-library/react";
 import { vi } from "vitest";
@@ -21,16 +22,15 @@ vi.mock("@/contexts/notification-context", () => ({
   useNotifications: vi.fn(() => ({ addToast: vi.fn() })),
 }));
 
-const mockFrom = vi.fn().mockReturnValue({
-  select: vi.fn().mockReturnThis(),
-  eq: vi.fn().mockReturnThis(),
-  order: vi.fn().mockResolvedValue({ data: [] }),
-  update: vi.fn().mockReturnThis(),
-  delete: vi.fn().mockReturnThis(),
-});
+const mockGetAgents = vi.fn();
+const mockGetWorkspaceMembers = vi.fn();
 
-vi.mock("@/hooks/use-supabase", () => ({
-  useSupabase: vi.fn(() => ({ from: mockFrom })),
+vi.mock("@/app/dashboard/agents/actions", () => ({
+  getAgents: (...args: unknown[]) => mockGetAgents(...args),
+  getWorkspaceMembers: (...args: unknown[]) => mockGetWorkspaceMembers(...args),
+  updateAgent: vi.fn(),
+  generateWebhookSecret: vi.fn(),
+  deleteAgent: vi.fn(),
 }));
 
 vi.mock("@/app/dashboard/settings/actions", () => ({
@@ -54,14 +54,10 @@ vi.mock("@/components/agents/reassign-owner-modal", () => ({
     open ? <div data-testid="reassign-modal">Reassign Modal</div> : null,
 }));
 
-const mockMemberMap = new Map([
-  ["user-001", { userId: "user-001", name: "Alice", email: "alice@example.com", role: "owner" }],
-  ["user-002", { userId: "user-002", name: "Bob", email: "bob@example.com", role: "member" }],
-]);
-
-vi.mock("@/lib/workspace-members", () => ({
-  getWorkspaceMemberMap: vi.fn(() => Promise.resolve(mockMemberMap)),
-}));
+const mockMembers = [
+  { userId: "user-001", name: "Alice", email: "alice@example.com", role: "owner" },
+  { userId: "user-002", name: "Bob", email: "bob@example.com", role: "member" },
+];
 
 vi.mock("next/navigation", () => ({
   useRouter: vi.fn(() => ({
@@ -76,35 +72,30 @@ vi.mock("next/navigation", () => ({
 function makeAgent(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     id: "agent-1",
-    workspace_id: "ws-001",
+    workspaceId: "ws-001",
     name: "Test Agent",
-    agent_type: "scraper",
+    agentType: "scraper",
     health: "healthy",
     stage: "production",
-    last_seen_at: new Date().toISOString(),
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
+    lastSeenAt: new Date().toISOString(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
     metadata: null,
     platform: null,
     description: null,
     capabilities: null,
-    webhook_url: null,
-    webhook_secret: null,
-    api_key_prefix: "doop_abcd123",
+    webhookUrl: null,
+    webhookSecret: null,
+    apiKeyPrefix: "doop_abcd123",
     tags: [],
-    owner_id: "user-001",
+    ownerId: "user-001",
     ...overrides,
   };
 }
 
 function setupAgents(agents: ReturnType<typeof makeAgent>[]) {
-  mockFrom.mockReturnValue({
-    select: vi.fn().mockReturnThis(),
-    eq: vi.fn().mockReturnThis(),
-    order: vi.fn().mockResolvedValue({ data: agents }),
-    update: vi.fn().mockReturnThis(),
-    delete: vi.fn().mockReturnThis(),
-  });
+  mockGetAgents.mockResolvedValue({ success: true, agents });
+  mockGetWorkspaceMembers.mockResolvedValue({ success: true, members: mockMembers });
 }
 
 // --- Tests ---
@@ -123,13 +114,13 @@ describe("AgentsSettings", () => {
 
   describe("Owner column", () => {
     it("displays owner name from member map", async () => {
-      setupAgents([makeAgent({ id: "a-1", name: "Agent Alpha", owner_id: "user-001" })]);
+      setupAgents([makeAgent({ id: "a-1", name: "Agent Alpha", ownerId: "user-001" })]);
       render(<AgentsSettings />);
       expect(await screen.findByText("Alice")).toBeInTheDocument();
     });
 
     it('shows "Unassigned" for null owner_id', async () => {
-      setupAgents([makeAgent({ id: "a-2", name: "Agent Beta", owner_id: null })]);
+      setupAgents([makeAgent({ id: "a-2", name: "Agent Beta", ownerId: null })]);
       render(<AgentsSettings />);
       expect(await screen.findByText("Unassigned")).toBeInTheDocument();
     });
@@ -137,19 +128,19 @@ describe("AgentsSettings", () => {
 
   describe("Permission: owner role", () => {
     it("shows Delete button for own agent", async () => {
-      setupAgents([makeAgent({ id: "a-1", owner_id: "user-001" })]);
+      setupAgents([makeAgent({ id: "a-1", ownerId: "user-001" })]);
       render(<AgentsSettings />);
       expect(await screen.findByText("Delete")).toBeInTheDocument();
     });
 
     it("shows Reassign button", async () => {
-      setupAgents([makeAgent({ id: "a-1", owner_id: "user-002" })]);
+      setupAgents([makeAgent({ id: "a-1", ownerId: "user-002" })]);
       render(<AgentsSettings />);
       expect(await screen.findByText("Reassign")).toBeInTheDocument();
     });
 
     it("shows Delete button for other user's agent (admin/owner can edit any)", async () => {
-      setupAgents([makeAgent({ id: "a-1", owner_id: "user-002" })]);
+      setupAgents([makeAgent({ id: "a-1", ownerId: "user-002" })]);
       render(<AgentsSettings />);
       expect(await screen.findByText("Delete")).toBeInTheDocument();
     });
@@ -167,13 +158,13 @@ describe("AgentsSettings", () => {
     });
 
     it("shows Reassign button", async () => {
-      setupAgents([makeAgent({ id: "a-1", owner_id: "user-002" })]);
+      setupAgents([makeAgent({ id: "a-1", ownerId: "user-002" })]);
       render(<AgentsSettings />);
       expect(await screen.findByText("Reassign")).toBeInTheDocument();
     });
 
     it("shows Delete button for any agent", async () => {
-      setupAgents([makeAgent({ id: "a-1", owner_id: "user-002" })]);
+      setupAgents([makeAgent({ id: "a-1", ownerId: "user-002" })]);
       render(<AgentsSettings />);
       expect(await screen.findByText("Delete")).toBeInTheDocument();
     });
@@ -191,27 +182,27 @@ describe("AgentsSettings", () => {
     });
 
     it("shows Delete for own agent", async () => {
-      setupAgents([makeAgent({ id: "a-1", owner_id: "user-001" })]);
+      setupAgents([makeAgent({ id: "a-1", ownerId: "user-001" })]);
       render(<AgentsSettings />);
       expect(await screen.findByText("Delete")).toBeInTheDocument();
     });
 
     it("hides Delete for other user's agent", async () => {
-      setupAgents([makeAgent({ id: "a-1", name: "Other Agent", owner_id: "user-002" })]);
+      setupAgents([makeAgent({ id: "a-1", name: "Other Agent", ownerId: "user-002" })]);
       render(<AgentsSettings />);
       await screen.findByText("Other Agent");
       expect(screen.queryByText("Delete")).not.toBeInTheDocument();
     });
 
     it("hides Reassign button for member role", async () => {
-      setupAgents([makeAgent({ id: "a-1", owner_id: "user-001" })]);
+      setupAgents([makeAgent({ id: "a-1", ownerId: "user-001" })]);
       render(<AgentsSettings />);
       await screen.findByText("Test Agent");
       expect(screen.queryByText("Reassign")).not.toBeInTheDocument();
     });
 
     it("disables Tags Edit button for other user's agent", async () => {
-      setupAgents([makeAgent({ id: "a-1", name: "Other Agent", owner_id: "user-002" })]);
+      setupAgents([makeAgent({ id: "a-1", name: "Other Agent", ownerId: "user-002" })]);
       render(<AgentsSettings />);
       await screen.findByText("Other Agent");
       // The Tags column has an Edit button
@@ -221,7 +212,7 @@ describe("AgentsSettings", () => {
     });
 
     it("enables Tags Edit button for own agent", async () => {
-      setupAgents([makeAgent({ id: "a-1", owner_id: "user-001" })]);
+      setupAgents([makeAgent({ id: "a-1", ownerId: "user-001" })]);
       render(<AgentsSettings />);
       await screen.findByText("Test Agent");
       const editButtons = screen.getAllByText("Edit");

@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateAgent } from "@/lib/api-auth";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { getDb } from "@/lib/db/client";
+import { tasks, taskDependencies, activityLog } from "@/lib/db/schema";
+import { eq, and, inArray, ne } from "drizzle-orm";
 import { withRateLimit } from "@/lib/api-rate-limit";
 import { isValidTransition } from "@/lib/task-status";
 import { deliverTaskToAgent, notifyLeadAgent } from "@/lib/task-delivery";
-import type { Json } from "@/lib/database.types";
-
-const TASK_SELECT =
-  "id, title, status, project_id, agent_id, priority, description, result, updated_at" as const;
 
 async function handlePatch(request: NextRequest, context?: unknown) {
   const agent = await authenticateAgent(request);
@@ -25,15 +23,29 @@ async function handlePatch(request: NextRequest, context?: unknown) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const allowedFields = ["status", "agent_id", "title", "description", "priority", "result"];
-  const updateFields: Record<string, unknown> = {};
+  // Map from snake_case body keys to camelCase schema fields
+  const fieldMapping: Record<string, keyof typeof tasks.$inferInsert> = {
+    status: "status",
+    agent_id: "agentId",
+    title: "title",
+    description: "description",
+    priority: "priority",
+    result: "result",
+  };
+
+  const allowedFields = Object.keys(fieldMapping);
+  const updateFields: Partial<typeof tasks.$inferInsert> = {};
+  const bodyFieldsUsed: string[] = [];
+
   for (const key of allowedFields) {
     if (key in body) {
-      updateFields[key] = body[key];
+      const schemaKey = fieldMapping[key];
+      (updateFields as Record<string, unknown>)[schemaKey] = body[key];
+      bodyFieldsUsed.push(key);
     }
   }
 
-  if (Object.keys(updateFields).length === 0) {
+  if (bodyFieldsUsed.length === 0) {
     return NextResponse.json({ error: "At least one field is required" }, { status: 400 });
   }
 
@@ -48,21 +60,26 @@ async function handlePatch(request: NextRequest, context?: unknown) {
     }
   }
 
-  const supabase = createAdminClient();
+  const db = getDb();
 
   // Fetch current task
-  const { data: currentTask, error: fetchError } = await supabase
-    .from("tasks")
-    .select("id, status, project_id, agent_id")
-    .eq("id", id)
-    .eq("workspace_id", agent.workspace_id)
-    .single();
+  const currentTaskRows = await db
+    .select({
+      id: tasks.id,
+      status: tasks.status,
+      projectId: tasks.projectId,
+      agentId: tasks.agentId,
+    })
+    .from(tasks)
+    .where(and(eq(tasks.id, id), eq(tasks.workspaceId, agent.workspaceId)))
+    .limit(1);
 
-  if (fetchError || !currentTask) {
+  const currentTask = currentTaskRows[0];
+  if (!currentTask) {
     return NextResponse.json({ error: "Task not found" }, { status: 404 });
   }
 
-  const currentStatus = currentTask.status as string;
+  const currentStatus = currentTask.status;
   const hasStatusChange = "status" in updateFields;
 
   let updatedTask;
@@ -80,39 +97,56 @@ async function handlePatch(request: NextRequest, context?: unknown) {
     }
 
     // Update with optimistic lock on current status
-    const { data, error } = await supabase
-      .from("tasks")
-      .update({ ...updateFields, updated_at: new Date().toISOString() })
-      .eq("id", id)
-      .eq("workspace_id", agent.workspace_id)
-      .eq("status", currentStatus)
-      .select(TASK_SELECT)
-      .single();
+    const result = await db
+      .update(tasks)
+      .set({ ...updateFields, updatedAt: new Date() })
+      .where(
+        and(
+          eq(tasks.id, id),
+          eq(tasks.workspaceId, agent.workspaceId),
+          eq(tasks.status, currentStatus)
+        )
+      )
+      .returning({
+        id: tasks.id,
+        title: tasks.title,
+        status: tasks.status,
+        project_id: tasks.projectId,
+        agent_id: tasks.agentId,
+        priority: tasks.priority,
+        description: tasks.description,
+        result: tasks.result,
+        updated_at: tasks.updatedAt,
+      });
 
-    if (error?.code === "PGRST116") {
+    if (result.length === 0) {
       return NextResponse.json({ error: "Conflict: task status has changed" }, { status: 409 });
     }
 
-    if (error || !data) {
-      return NextResponse.json({ error: "Failed to update task" }, { status: 500 });
-    }
-
-    updatedTask = data;
+    updatedTask = result[0];
   } else {
     // Non-status update — no lock needed
-    const { data, error } = await supabase
-      .from("tasks")
-      .update({ ...updateFields, updated_at: new Date().toISOString() })
-      .eq("id", id)
-      .eq("workspace_id", agent.workspace_id)
-      .select(TASK_SELECT)
-      .single();
+    const result = await db
+      .update(tasks)
+      .set({ ...updateFields, updatedAt: new Date() })
+      .where(and(eq(tasks.id, id), eq(tasks.workspaceId, agent.workspaceId)))
+      .returning({
+        id: tasks.id,
+        title: tasks.title,
+        status: tasks.status,
+        project_id: tasks.projectId,
+        agent_id: tasks.agentId,
+        priority: tasks.priority,
+        description: tasks.description,
+        result: tasks.result,
+        updated_at: tasks.updatedAt,
+      });
 
-    if (error) {
+    if (result.length === 0) {
       return NextResponse.json({ error: "Failed to update task" }, { status: 500 });
     }
 
-    updatedTask = data;
+    updatedTask = result[0];
   }
 
   // Side effects
@@ -120,36 +154,35 @@ async function handlePatch(request: NextRequest, context?: unknown) {
 
   // Auto-deliver when agent_id newly set on deliverable task
   if (
-    updateFields.agent_id &&
-    updateFields.agent_id !== currentTask.agent_id &&
+    updateFields.agentId &&
+    updateFields.agentId !== currentTask.agentId &&
     (currentStatus === "pending" || currentStatus === "waiting_on_agent")
   ) {
     // Check for unresolved dependencies before auto-delivering
-    const { data: deps } = await supabase
-      .from("task_dependencies")
-      .select("depends_on_task_id")
-      .eq("task_id", id);
+    const deps = await db
+      .select({ dependsOnTaskId: taskDependencies.dependsOnTaskId })
+      .from(taskDependencies)
+      .where(eq(taskDependencies.taskId, id));
 
     let hasUnresolvedDeps = false;
-    if (deps && deps.length > 0) {
-      const depIds = deps.map((d: { depends_on_task_id: string }) => d.depends_on_task_id);
-      const { data: incompleteDeps } = await supabase
-        .from("tasks")
-        .select("id")
-        .in("id", depIds)
-        .neq("status", "completed")
+    if (deps.length > 0) {
+      const depIds = deps.map((d) => d.dependsOnTaskId);
+      const incompleteDeps = await db
+        .select({ id: tasks.id })
+        .from(tasks)
+        .where(and(inArray(tasks.id, depIds), ne(tasks.status, "completed")))
         .limit(1);
-      hasUnresolvedDeps = !!incompleteDeps && incompleteDeps.length > 0;
+      hasUnresolvedDeps = incompleteDeps.length > 0;
     }
 
     if (!hasUnresolvedDeps) {
-      delivery = await deliverTaskToAgent(id, updateFields.agent_id as string, agent.workspace_id);
+      delivery = await deliverTaskToAgent(id, updateFields.agentId as string, agent.workspaceId);
     }
   }
 
   // Notify lead agent on status change
-  if (hasStatusChange && currentTask.project_id) {
-    void notifyLeadAgent(currentTask.project_id as string, "task.status_changed", {
+  if (hasStatusChange && currentTask.projectId) {
+    void notifyLeadAgent(currentTask.projectId, "task.status_changed", {
       task_id: id,
       title: updatedTask.title,
       old_status: currentStatus,
@@ -160,13 +193,13 @@ async function handlePatch(request: NextRequest, context?: unknown) {
   // Activity log
   const details = hasStatusChange
     ? { task_id: id, changes: { old_status: currentStatus, new_status: updateFields.status } }
-    : { task_id: id, fields_updated: Object.keys(updateFields) };
+    : { task_id: id, fields_updated: bodyFieldsUsed };
 
-  await supabase.from("activity_log").insert({
-    workspace_id: agent.workspace_id,
-    agent_id: agent.id,
+  await db.insert(activityLog).values({
+    workspaceId: agent.workspaceId,
+    agentId: agent.id,
     action: "task_updated",
-    details: details as unknown as Json,
+    details,
   });
 
   return NextResponse.json({ task: updatedTask, delivery });

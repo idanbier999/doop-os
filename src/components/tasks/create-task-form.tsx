@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useSupabase } from "@/hooks/use-supabase";
 import { useWorkspace } from "@/contexts/workspace-context";
 import { Modal } from "@/components/ui/modal";
 import { Input } from "@/components/ui/input";
@@ -10,6 +9,7 @@ import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { AgentMultiSelect } from "@/components/ui/agent-multi-select";
 import type { AgentAssignment } from "@/components/ui/agent-multi-select";
+import { createTask } from "@/app/dashboard/tasks/actions";
 
 interface Agent {
   id: string;
@@ -30,8 +30,7 @@ const priorityOptions = [
 ];
 
 export function CreateTaskForm({ open, onClose, agents }: CreateTaskFormProps) {
-  const { workspaceId, userId } = useWorkspace();
-  const supabase = useSupabase();
+  const { workspaceId } = useWorkspace();
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -50,64 +49,22 @@ export function CreateTaskForm({ open, onClose, agents }: CreateTaskFormProps) {
     setSubmitting(true);
     setError("");
 
-    const { data: inserted, error: insertError } = await supabase
-      .from("tasks")
-      .insert({
-        workspace_id: workspaceId,
-        title: title.trim(),
-        description: description.trim() || null,
-        priority,
-        agent_id: agentAssignments.find((a) => a.role === "primary")?.agent_id ?? null,
-        assigned_to: null,
-        created_by: userId,
-        status: "pending",
-      })
-      .select("id")
-      .single();
+    const result = await createTask({
+      workspaceId,
+      title: title.trim(),
+      description: description.trim() || undefined,
+      priority,
+      agentAssignments: agentAssignments.map((a) => ({
+        agent_id: a.agent_id,
+        role: a.role,
+      })),
+    });
 
     setSubmitting(false);
 
-    if (insertError || !inserted) {
-      setError(insertError?.message ?? "Failed to create task");
+    if (!result.success) {
+      setError(result.error ?? "Failed to create task");
       return;
-    }
-
-    // Insert agent assignments into junction table
-    if (agentAssignments.length > 0) {
-      const { error: junctionError } = await supabase.from("task_agents").insert(
-        agentAssignments.map((a) => ({
-          task_id: inserted.id,
-          agent_id: a.agent_id,
-          role: a.role,
-        }))
-      );
-      if (junctionError) {
-        setError("Task created but agent assignment failed. Please assign agents manually.");
-        console.error("Failed to insert task_agents:", junctionError.message);
-        return;
-      }
-    }
-
-    try {
-      const primaryAgent = agentAssignments.find((a) => a.role === "primary");
-      const agentName = primaryAgent
-        ? (agents.find((a) => a.id === primaryAgent.agent_id)?.name ?? null)
-        : null;
-      await supabase.from("activity_log").insert({
-        workspace_id: workspaceId,
-        user_id: userId,
-        agent_id: primaryAgent?.agent_id ?? null,
-        action: "task_created",
-        details: {
-          task_id: inserted.id,
-          title: title.trim(),
-          priority,
-          agent_name: agentName,
-          agent_count: agentAssignments.length,
-        },
-      });
-    } catch {
-      // Best-effort: task was already created successfully
     }
 
     setTitle("");

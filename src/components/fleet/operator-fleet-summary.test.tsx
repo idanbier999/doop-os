@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { render, screen, fireEvent } from "@testing-library/react";
 import { OperatorFleetSummary, type OperatorGroup } from "./operator-fleet-summary";
 

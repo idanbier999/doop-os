@@ -1,31 +1,28 @@
 import { redirect } from "next/navigation";
-import { getAuthenticatedSupabase } from "@/lib/supabase/server-with-auth";
-import { signSupabaseToken } from "@/lib/jwt";
-import { SupabaseTokenProvider } from "@/contexts/supabase-token-context";
+import { getSession } from "@/lib/auth/session";
+import { getDb } from "@/lib/db/client";
+import { workspaceMembers } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 import { OnboardingWizard } from "@/components/onboarding/onboarding-wizard";
 
 export default async function OnboardingPage() {
-  const { user, supabase } = await getAuthenticatedSupabase();
+  const user = await getSession();
 
-  if (!user || !supabase) {
+  if (!user) {
     redirect("/login");
   }
 
   // If user already has a workspace, skip onboarding
-  const { data: membership } = await supabase
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- RPC name not in generated types yet
-    .rpc("check_user_workspace_membership" as any)
-    .maybeSingle();
+  const db = getDb();
+  const [membership] = await db
+    .select({ id: workspaceMembers.id })
+    .from(workspaceMembers)
+    .where(eq(workspaceMembers.userId, user.id))
+    .limit(1);
 
   if (membership) {
     redirect("/dashboard");
   }
 
-  const supabaseToken = signSupabaseToken(user.id);
-
-  return (
-    <SupabaseTokenProvider token={supabaseToken}>
-      <OnboardingWizard />
-    </SupabaseTokenProvider>
-  );
+  return <OnboardingWizard />;
 }

@@ -34,7 +34,7 @@ const actionIcons: Record<string, { path: string; color: string }> = {
   },
 };
 
-function formatTimestamp(dateStr: string | null) {
+function formatTimestamp(dateStr: string | Date | null) {
   if (!dateStr) return "";
   const d = new Date(dateStr);
   return d.toLocaleString("en-US", {
@@ -117,16 +117,14 @@ export function ActivityItem({ entry }: ActivityItemProps) {
             </svg>
           )}
         </div>
-        {entry.details && typeof entry.details === "object" && (
+        {entry.details != null && typeof entry.details === "object" ? (
           <p className="text-xs text-mac-dark-gray mt-0.5 line-clamp-2">
             {(entry.details as Record<string, unknown>).message
               ? String((entry.details as Record<string, unknown>).message)
               : JSON.stringify(entry.details)}
           </p>
-        )}
-        <span className="text-xs text-mac-gray mt-1 block">
-          {formatTimestamp(entry.created_at)}
-        </span>
+        ) : null}
+        <span className="text-xs text-mac-gray mt-1 block">{formatTimestamp(entry.createdAt)}</span>
         {isExpandable && expanded && (
           <pre className="rounded-md p-3 mt-2 text-xs text-mac-dark-gray overflow-x-auto mac-inset">
             {JSON.stringify(entry.details, null, 2)}

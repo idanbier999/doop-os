@@ -1,32 +1,31 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "@/lib/database.types";
+import { getDb } from "@/lib/db/client";
+import { workspaceMembers, users } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 
 export type MemberInfo = {
   userId: string;
   name: string;
-  email: string;
   role: string;
 };
 
-export async function getWorkspaceMemberMap(
-  supabase: SupabaseClient<Database>,
-  workspaceId: string
-): Promise<Map<string, MemberInfo>> {
-  const { data } = await supabase
-    .from("workspace_members")
-    .select("user_id, role, user:user!workspace_members_user_id_fkey(name, email)")
-    .eq("workspace_id", workspaceId);
+export async function getWorkspaceMemberMap(workspaceId: string): Promise<Map<string, MemberInfo>> {
+  const db = getDb();
+  const rows = await db
+    .select({
+      userId: workspaceMembers.userId,
+      role: workspaceMembers.role,
+      userName: users.name,
+    })
+    .from(workspaceMembers)
+    .innerJoin(users, eq(workspaceMembers.userId, users.id))
+    .where(eq(workspaceMembers.workspaceId, workspaceId));
 
   const map = new Map<string, MemberInfo>();
 
-  if (!data) return map;
-
-  for (const row of data) {
-    const user = row.user as unknown as { name: string | null; email: string | null } | null;
-    map.set(row.user_id, {
-      userId: row.user_id,
-      name: user?.name ?? "Unknown",
-      email: user?.email ?? "Unknown",
+  for (const row of rows) {
+    map.set(row.userId, {
+      userId: row.userId,
+      name: row.userName,
       role: row.role,
     });
   }

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
-import { useSupabase } from "@/hooks/use-supabase";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 export interface UploadedFile {
@@ -54,7 +53,6 @@ export function FileUpload({
   existingFiles = [],
   accept = DEFAULT_ALLOWED_TYPES,
 }: FileUploadProps) {
-  const supabase = useSupabase();
   const [files, setFiles] = useState<UploadedFile[]>(existingFiles);
   const [isDragging, setIsDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -74,11 +72,22 @@ export function FileUpload({
       setFiles((prev) => [...prev, uploadedFile]);
 
       try {
-        const { data, error } = await supabase.storage
-          .from("project-files")
-          .upload(storagePath, file, { upsert: true });
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("bucket", "project-files");
+        formData.append("path", storagePath);
 
-        if (error) throw error;
+        const res = await fetch("/api/files/upload", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({ error: "Upload failed" }));
+          throw new Error(body.error ?? `Upload failed (${res.status})`);
+        }
+
+        const data = await res.json();
 
         const completed: UploadedFile = {
           ...uploadedFile,
@@ -103,7 +112,7 @@ export function FileUpload({
         return failed;
       }
     },
-    [supabase, workspaceId, projectId]
+    [workspaceId, projectId]
   );
 
   const handleFiles = useCallback(
@@ -150,7 +159,11 @@ export function FileUpload({
 
   const removeFile = async (file: UploadedFile) => {
     if (file.status === "complete") {
-      await supabase.storage.from("project-files").remove([file.path]);
+      await fetch(`/api/files/project-files/${file.path}`, {
+        method: "DELETE",
+      }).catch(() => {
+        // Best-effort removal — don't block UI
+      });
     }
     setFiles((prev) => prev.filter((f) => f.path !== file.path));
   };

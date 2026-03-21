@@ -41,55 +41,42 @@ describe("middleware", () => {
   it("allows authenticated user to access /dashboard with valid session", async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve({ session: { id: "s1" }, user: { id: "u1" } }),
+      json: () => Promise.resolve({ user: { id: "u1" } }),
     });
 
     const request = createRequest("/dashboard", {
-      "better-auth.session_token": "valid-session",
+      "doop-session": "valid-session",
     });
     const response = await middleware(request);
     expect(response.headers.get("location")).toBeNull();
   });
 
-  it("allows authenticated user with __Secure- prefix cookie", async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ session: { id: "s1" }, user: { id: "u1" } }),
-    });
-
-    const request = createRequest("/dashboard", {
-      "__Secure-better-auth.session_token": "valid-session",
-    });
-    const response = await middleware(request);
-    expect(response.headers.get("location")).toBeNull();
-  });
-
-  it("redirects to /login and clears cookies when session is invalid", async () => {
+  it("redirects to /login and clears cookie when session is invalid", async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: () => Promise.resolve(null),
     });
 
     const request = createRequest("/dashboard", {
-      "better-auth.session_token": "stale-token",
+      "doop-session": "stale-token",
     });
     const response = await middleware(request);
 
     expect(response.status).toBe(307);
     expect(new URL(response.headers.get("location")!).pathname).toBe("/login");
-    // Cookies should be cleared (set-cookie with max-age=0)
+    // Cookie should be cleared (set-cookie with max-age=0)
     const setCookie = response.headers.getSetCookie();
-    expect(setCookie.some((c: string) => c.includes("better-auth.session_token"))).toBe(true);
+    expect(setCookie.some((c: string) => c.includes("doop-session"))).toBe(true);
   });
 
-  it("redirects to /login when get-session returns non-ok status", async () => {
+  it("redirects to /login when session endpoint returns non-ok status", async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: false,
       json: () => Promise.resolve({}),
     });
 
     const request = createRequest("/dashboard", {
-      "better-auth.session_token": "expired-token",
+      "doop-session": "expired-token",
     });
     const response = await middleware(request);
 
@@ -101,7 +88,7 @@ describe("middleware", () => {
     global.fetch = vi.fn().mockRejectedValue(new Error("ECONNREFUSED"));
 
     const request = createRequest("/dashboard", {
-      "better-auth.session_token": "valid-session",
+      "doop-session": "valid-session",
     });
     const response = await middleware(request);
 
@@ -115,20 +102,20 @@ describe("middleware", () => {
     expect(response.headers.get("location")).toBeNull();
   });
 
-  it("forwards cookies to the get-session endpoint", async () => {
+  it("forwards cookies to the session endpoint", async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve({ session: { id: "s1" }, user: { id: "u1" } }),
+      json: () => Promise.resolve({ user: { id: "u1" } }),
     });
     global.fetch = mockFetch;
 
     const request = createRequest("/dashboard", {
-      "better-auth.session_token": "my-token",
+      "doop-session": "my-token",
     });
     await middleware(request);
 
     expect(mockFetch).toHaveBeenCalledWith(
-      "http://localhost:3000/api/auth/get-session",
+      "http://localhost:3000/api/auth/session",
       expect.objectContaining({
         headers: expect.objectContaining({ cookie: expect.stringContaining("my-token") }),
       })
@@ -139,47 +126,22 @@ describe("middleware", () => {
     global.fetch = vi.fn().mockRejectedValue(new DOMException("Signal timed out.", "TimeoutError"));
 
     const request = createRequest("/dashboard", {
-      "better-auth.session_token": "valid-session",
+      "doop-session": "valid-session",
     });
     const response = await middleware(request);
 
-    // Timeout is treated as network error — fail-open
+    // Timeout is treated as network error -- fail-open
     expect(response.headers.get("location")).toBeNull();
   });
 
-  it("clears both cookie variants on invalid session", async () => {
+  it("redirects to /login when session has no user object", async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve(null),
+      json: () => Promise.resolve({ something: "else" }),
     });
 
     const request = createRequest("/dashboard", {
-      "better-auth.session_token": "stale-token",
-      "__Secure-better-auth.session_token": "stale-token",
-    });
-    const response = await middleware(request);
-
-    const setCookie = response.headers.getSetCookie();
-    expect(setCookie.some((c: string) => c.startsWith("better-auth.session_token="))).toBe(true);
-    expect(setCookie.some((c: string) => c.startsWith("__Secure-better-auth.session_token="))).toBe(
-      true
-    );
-  });
-
-  it("returns next() for /signup without cookie (no redirect loop)", async () => {
-    const request = createRequest("/signup");
-    const response = await middleware(request);
-    expect(response.headers.get("location")).toBeNull();
-  });
-
-  it("redirects to /login when session has user but no session object", async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ user: { id: "u1" } }),
-    });
-
-    const request = createRequest("/dashboard", {
-      "better-auth.session_token": "partial-token",
+      "doop-session": "partial-token",
     });
     const response = await middleware(request);
 
@@ -190,7 +152,8 @@ describe("middleware", () => {
   it("config.matcher includes expected patterns", () => {
     expect(config.matcher).toContain("/dashboard/:path*");
     expect(config.matcher).toContain("/login");
-    expect(config.matcher).toContain("/signup");
     expect(config.matcher).toContain("/onboarding");
+    // /signup is no longer in the matcher
+    expect(config.matcher).not.toContain("/signup");
   });
 });

@@ -6,10 +6,6 @@ function MockWorkspaceProvider({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-function MockSupabaseTokenProvider({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
-}
-
 // Setup context mocks
 vi.mock("@/contexts/workspace-context", async () => {
   return {
@@ -22,17 +18,6 @@ vi.mock("@/contexts/workspace-context", async () => {
   };
 });
 
-vi.mock("@/contexts/supabase-token-context", async () => {
-  return {
-    SupabaseTokenProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-    useSupabaseToken: vi.fn(() => "test-token"),
-  };
-});
-
 export function TestProviders({ children }: { children: React.ReactNode }) {
-  return (
-    <MockWorkspaceProvider>
-      <MockSupabaseTokenProvider>{children}</MockSupabaseTokenProvider>
-    </MockWorkspaceProvider>
-  );
+  return <MockWorkspaceProvider>{children}</MockWorkspaceProvider>;
 }

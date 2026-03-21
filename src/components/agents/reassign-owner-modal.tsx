@@ -4,9 +4,8 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
-import { useSupabase } from "@/hooks/use-supabase";
-import { getWorkspaceMemberMap, type MemberInfo } from "@/lib/workspace-members";
-import { reassignAgentOwner } from "@/app/dashboard/agents/actions";
+import { reassignAgentOwner, getWorkspaceMembers } from "@/app/dashboard/agents/actions";
+import type { MemberInfo } from "@/lib/workspace-members";
 
 interface ReassignOwnerModalProps {
   open: boolean;
@@ -25,7 +24,6 @@ export function ReassignOwnerModal({
   currentOwnerId,
   workspaceId,
 }: ReassignOwnerModalProps) {
-  const supabase = useSupabase();
   const router = useRouter();
   const [members, setMembers] = useState<MemberInfo[]>([]);
   const [selectedId, setSelectedId] = useState<string>("");
@@ -41,10 +39,12 @@ export function ReassignOwnerModal({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setSelectedId(currentOwnerId ?? "");
 
-    getWorkspaceMemberMap(supabase, workspaceId).then((map) => {
-      setMembers(Array.from(map.values()));
+    getWorkspaceMembers(workspaceId).then((result) => {
+      if (result.success) {
+        setMembers(result.members);
+      }
     });
-  }, [open, supabase, workspaceId, currentOwnerId]);
+  }, [open, workspaceId, currentOwnerId]);
 
   async function handleSubmit() {
     setSubmitting(true);

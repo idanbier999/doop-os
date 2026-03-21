@@ -1,15 +1,13 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { useRealtime } from "@/hooks/use-realtime";
+import { useRealtimeEvents } from "@/hooks/use-realtime-events";
 import { useWorkspace } from "@/contexts/workspace-context";
-import { useSupabase } from "@/hooks/use-supabase";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardBody } from "@/components/ui/card";
 import { relativeTime } from "@/lib/utils";
 import type { Tables } from "@/lib/database.types";
-import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 
 interface AgentProblemsPanelProps {
   agentId: string;
@@ -20,46 +18,44 @@ export function AgentProblemsPanel({ agentId, initialProblems }: AgentProblemsPa
   const [problems, setProblems] = useState<Tables<"problems">[]>(initialProblems);
   const [loading, setLoading] = useState<string | null>(null);
   const { userId, workspaceId } = useWorkspace();
-  const supabase = useSupabase();
 
-  const handlePayload = useCallback(
-    (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
-      if (payload.eventType === "INSERT") {
-        const newProblem = payload.new as Tables<"problems">;
-        if (newProblem.agent_id === agentId) {
+  const handleEvent = useCallback(
+    (event: { event: string; new?: Record<string, unknown> }) => {
+      if (event.event === "INSERT") {
+        const newProblem = event.new as Tables<"problems">;
+        if (newProblem.agentId === agentId) {
           setProblems((prev) => [newProblem, ...prev]);
         }
-      } else if (payload.eventType === "UPDATE") {
-        const updated = payload.new as Tables<"problems">;
+      } else if (event.event === "UPDATE") {
+        const updated = event.new as Tables<"problems">;
         setProblems((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
       }
     },
     [agentId]
   );
 
-  useRealtime({
+  useRealtimeEvents({
     table: "problems",
-    filter: `agent_id=eq.${agentId}`,
-    onPayload: handlePayload,
+    onEvent: handleEvent,
   });
 
   const updateStatus = async (problemId: string, status: string) => {
     setLoading(problemId);
-    const updateData: Record<string, string> = { status };
-    if (status === "resolved" || status === "dismissed") {
-      updateData.resolved_by = userId;
-      updateData.resolved_at = new Date().toISOString();
+    try {
+      await fetch(`/api/v1/problems`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          problemId,
+          status,
+          resolvedBy: status === "resolved" || status === "dismissed" ? userId : undefined,
+          workspaceId,
+          agentId,
+        }),
+      });
+    } finally {
+      setLoading(null);
     }
-    await supabase.from("problems").update(updateData).eq("id", problemId);
-    const problem = problems.find((p) => p.id === problemId);
-    await supabase.from("activity_log").insert({
-      workspace_id: workspaceId,
-      agent_id: agentId,
-      user_id: userId,
-      action: `problem_${status}`,
-      details: { problem_id: problemId, title: problem?.title },
-    });
-    setLoading(null);
   };
 
   return (
@@ -92,7 +88,7 @@ export function AgentProblemsPanel({ agentId, initialProblems }: AgentProblemsPa
                       </p>
                     )}
                     <p className="mt-1 text-xs text-mac-dark-gray">
-                      {relativeTime(problem.created_at)}
+                      {relativeTime(problem.createdAt)}
                     </p>
                   </div>
                   {problem.status === "open" && (

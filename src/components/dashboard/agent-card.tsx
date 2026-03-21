@@ -34,8 +34,8 @@ export function AgentCard({ agent, completionRate, openProblems }: AgentCardProp
         <span className="truncate text-sm font-medium text-mac-black">{agent.name}</span>
       </div>
       <div className="mt-2 flex items-center gap-2">
-        {agent.agent_type && <Badge variant="stage" value={agent.agent_type} />}
-        <span className="text-xs text-mac-dark-gray">{relativeTime(agent.last_seen_at)}</span>
+        {agent.agentType && <Badge variant="stage" value={agent.agentType} />}
+        <span className="text-xs text-mac-dark-gray">{relativeTime(agent.lastSeenAt)}</span>
       </div>
       {(completionRate !== undefined || (openProblems !== undefined && openProblems > 0)) && (
         <div className="mt-2 flex items-center gap-3 text-xs">

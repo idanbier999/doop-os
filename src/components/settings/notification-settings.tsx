@@ -1,28 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSupabase } from "@/hooks/use-supabase";
 import { useWorkspace } from "@/contexts/workspace-context";
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardBody } from "@/components/ui/card";
+import { Card, CardBody } from "@/components/ui/card";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { testSlackWebhook } from "@/app/dashboard/settings/actions";
+import {
+  testSlackWebhook,
+  getNotificationSettings,
+  saveNotificationSettings,
+} from "@/app/dashboard/settings/actions";
 
 const SEVERITIES = ["low", "medium", "high", "critical"] as const;
 
-interface NotificationRow {
-  id: string;
-  workspace_id: string;
-  slack_enabled: boolean;
-  slack_webhook_url: string | null;
-  notify_on_problem_severity: string[];
-  created_at: string;
-  updated_at: string;
-}
-
 export function NotificationSettings() {
   const { workspaceId, userRole } = useWorkspace();
-  const supabase = useSupabase();
   const canEdit = userRole === "owner" || userRole === "admin";
 
   const [loading, setLoading] = useState(true);
@@ -40,31 +32,22 @@ export function NotificationSettings() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data, error } = await supabase
-        .from("notification_settings")
-        .select(
-          "id, workspace_id, slack_enabled, slack_webhook_url, notify_on_problem_severity, created_at, updated_at"
-        )
-        .eq("workspace_id", workspaceId)
-        .single();
-
+      const result = await getNotificationSettings(workspaceId);
       if (cancelled) return;
 
-      if (error) {
-        setLoading(false);
-        return;
+      if (result.settings) {
+        setSlackEnabled(result.settings.slackEnabled ?? false);
+        setWebhookUrl(result.settings.slackWebhookUrl || "");
+        setSelectedSeverities(
+          new Set(result.settings.notifyOnProblemSeverity || ["high", "critical"])
+        );
       }
-
-      const row = data as NotificationRow;
-      setSlackEnabled(row.slack_enabled);
-      setWebhookUrl(row.slack_webhook_url || "");
-      setSelectedSeverities(new Set(row.notify_on_problem_severity || ["high", "critical"]));
       setLoading(false);
     })();
     return () => {
       cancelled = true;
     };
-  }, [workspaceId, supabase]);
+  }, [workspaceId]);
 
   // Auto-clear message after 3 seconds
   useEffect(() => {
@@ -108,20 +91,16 @@ export function NotificationSettings() {
     setSaving(true);
     setMessage(null);
 
-    const { error } = await supabase
-      .from("notification_settings")
-      .update({
-        slack_enabled: slackEnabled,
-        slack_webhook_url: webhookUrl.trim() || null,
-        notify_on_problem_severity: Array.from(selectedSeverities),
-        updated_at: new Date().toISOString(),
-      })
-      .eq("workspace_id", workspaceId);
+    const result = await saveNotificationSettings(workspaceId, {
+      slackEnabled,
+      slackWebhookUrl: webhookUrl.trim() || null,
+      notifyOnProblemSeverity: Array.from(selectedSeverities),
+    });
 
     setSaving(false);
 
-    if (error) {
-      setMessage({ text: error.message, type: "error" });
+    if (result.error) {
+      setMessage({ text: result.error, type: "error" });
     } else {
       setMessage({ text: "Notification settings saved.", type: "success" });
     }
@@ -145,12 +124,6 @@ export function NotificationSettings() {
         <LoadingSpinner />
       </div>
     );
-  }
-
-  function maskUrl(url: string) {
-    if (!url) return "";
-    if (url.length <= 12) return url;
-    return url.slice(0, 8) + "\u2022".repeat(16) + url.slice(-4);
   }
 
   return (
@@ -183,7 +156,7 @@ export function NotificationSettings() {
             <input
               id="webhook-url"
               type={showWebhookUrl ? "text" : "password"}
-              value={showWebhookUrl ? webhookUrl : webhookUrl}
+              value={webhookUrl}
               onChange={(e) => setWebhookUrl(e.target.value)}
               placeholder="https://hooks.slack.com/services/..."
               disabled={!slackEnabled}

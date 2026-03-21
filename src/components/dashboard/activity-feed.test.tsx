@@ -1,8 +1,9 @@
+// @vitest-environment jsdom
 import { render, screen } from "@testing-library/react";
 import { ActivityFeed } from "@/components/dashboard/activity-feed";
 
-vi.mock("@/hooks/use-realtime", () => ({
-  useRealtime: vi.fn(),
+vi.mock("@/hooks/use-realtime-events", () => ({
+  useRealtimeEvents: vi.fn(),
 }));
 
 vi.mock("@/contexts/workspace-context", () => ({

@@ -6,7 +6,6 @@ describe("Smoke test", () => {
   });
 
   it("environment variables are set", () => {
-    expect(process.env.NEXT_PUBLIC_SUPABASE_URL).toBe("https://test.supabase.co");
-    expect(process.env.SUPABASE_JWT_SECRET).toBeDefined();
+    expect(process.env.DATABASE_URL).toBeDefined();
   });
 });

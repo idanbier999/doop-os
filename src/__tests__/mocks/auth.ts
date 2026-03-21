@@ -1,40 +1,15 @@
-import { vi } from "vitest";
+/**
+ * Mock user and agent objects for testing.
+ */
 
-export const mockSession = {
-  user: {
-    id: "user-001",
-    email: "test@example.com",
-    name: "Test User",
-    emailVerified: true,
-    createdAt: new Date("2024-01-01"),
-    updatedAt: new Date("2024-01-01"),
-    image: null,
-  },
-  session: {
-    id: "session-001",
-    userId: "user-001",
-    token: "session-token-001",
-    expiresAt: new Date(Date.now() + 86400000),
-    createdAt: new Date("2024-01-01"),
-    updatedAt: new Date("2024-01-01"),
-    ipAddress: "127.0.0.1",
-    userAgent: "test",
-  },
+export const mockUser = {
+  id: "00000000-0000-4000-8000-000000000001",
+  name: "Test User",
+  createdAt: new Date("2026-01-01T00:00:00Z"),
 };
 
-export const mockAuth = {
-  api: {
-    getSession: vi.fn().mockResolvedValue(mockSession),
-  },
-  handler: vi.fn(),
+export const mockAgent = {
+  id: "agent-001",
+  workspaceId: "ws-001",
+  name: "test-agent",
 };
-
-export function setupAuthMock() {
-  vi.mock("@/lib/auth", () => ({
-    auth: mockAuth,
-  }));
-}
-
-export function resetAuthMock() {
-  mockAuth.api.getSession.mockResolvedValue(mockSession);
-}

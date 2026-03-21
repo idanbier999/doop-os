@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
-import { createMockSupabaseClient, mockResolve, mockReject } from "@/__tests__/mocks/supabase";
+import { createMockDb } from "@/__tests__/mocks/drizzle";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -8,36 +8,40 @@ import { createMockSupabaseClient, mockResolve, mockReject } from "@/__tests__/m
 
 const mockAgent = {
   id: "agent-001",
-  workspace_id: "ws-001",
+  workspaceId: "ws-001",
   name: "test-agent",
 };
+
+const { mockDb, pushResult, pushError, reset } = createMockDb();
 
 vi.mock("@/lib/api-auth", () => ({
   authenticateAgent: vi.fn(),
 }));
 
-vi.mock("@/lib/supabase/admin", () => ({
-  createAdminClient: vi.fn(),
+vi.mock("@/lib/db/client", () => ({
+  getDb: () => mockDb,
 }));
 
 vi.mock("@/lib/api-rate-limit", () => ({
   withRateLimit: (handler: Function) => handler,
 }));
 
+vi.mock("@/lib/storage", () => ({
+  getStorage: () => ({
+    getUrl: (_bucket: string, path: string) => `https://storage.example.com/${path}`,
+  }),
+}));
+
 import { authenticateAgent } from "@/lib/api-auth";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { GET } from "./route";
 
 // ---------------------------------------------------------------------------
 // Setup
 // ---------------------------------------------------------------------------
 
-let mockSupabase: ReturnType<typeof createMockSupabaseClient>;
-
 beforeEach(() => {
   vi.clearAllMocks();
-  mockSupabase = createMockSupabaseClient();
-  (createAdminClient as ReturnType<typeof vi.fn>).mockReturnValue(mockSupabase.client);
+  reset();
   (authenticateAgent as ReturnType<typeof vi.fn>).mockResolvedValue(mockAgent);
 });
 
@@ -67,10 +71,8 @@ describe("GET /api/v1/projects/[id]", () => {
   });
 
   it("returns 403 when agent is not a project member", async () => {
-    const membershipChain = createMockSupabaseClient().chain;
-    mockReject(membershipChain, { message: "not found", code: "PGRST116" });
-
-    mockSupabase.from.mockReturnValueOnce(membershipChain);
+    // db.select() for project_agents membership → empty
+    pushResult([]);
 
     const request = new NextRequest("http://localhost/api/v1/projects/proj-001", {
       method: "GET",
@@ -85,13 +87,10 @@ describe("GET /api/v1/projects/[id]", () => {
   });
 
   it("returns 404 when project not found", async () => {
-    const membershipChain = createMockSupabaseClient().chain;
-    mockResolve(membershipChain, { role: "member" });
-
-    const projectChain = createMockSupabaseClient().chain;
-    mockReject(projectChain, { message: "not found", code: "PGRST116" });
-
-    mockSupabase.from.mockReturnValueOnce(membershipChain).mockReturnValueOnce(projectChain);
+    // db.select() for membership → found
+    pushResult([{ role: "member" }]);
+    // db.select() for project → empty
+    pushResult([]);
 
     const request = new NextRequest("http://localhost/api/v1/projects/proj-001", {
       method: "GET",
@@ -106,51 +105,46 @@ describe("GET /api/v1/projects/[id]", () => {
   });
 
   it("returns full response with project, team, files, agent_role", async () => {
-    const membershipChain = createMockSupabaseClient().chain;
-    mockResolve(membershipChain, { role: "lead" });
-
-    const projectChain = createMockSupabaseClient().chain;
-    mockResolve(projectChain, {
-      id: "proj-001",
-      name: "Test Project",
-      description: "A test project",
-      instructions: "Do things",
-      orchestration_mode: "collaborative",
-      status: "active",
-      created_at: "2026-01-01T00:00:00Z",
-      updated_at: "2026-01-02T00:00:00Z",
-    });
-
-    const teamChain = createMockSupabaseClient().chain;
-    mockResolve(teamChain, [
+    // db.select() for membership
+    pushResult([{ role: "lead" }]);
+    // db.select() for project
+    pushResult([
+      {
+        id: "proj-001",
+        name: "Test Project",
+        description: "A test project",
+        instructions: "Do things",
+        orchestration_mode: "collaborative",
+        status: "active",
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-02T00:00:00Z",
+      },
+    ]);
+    // db.select() for team (join projectAgents + agents)
+    pushResult([
       {
         role: "lead",
         status: "active",
-        agent: {
-          id: "agent-001",
-          name: "test-agent",
-          capabilities: ["code"],
-          agent_type: "developer",
-          health: "online",
-          webhook_url: "https://example.com/hook",
-        },
+        agentId: "agent-001",
+        agentName: "test-agent",
+        agentCapabilities: ["code"],
+        agentType: "developer",
+        agentHealth: "online",
+        agentWebhookUrl: "https://example.com/hook",
       },
       {
         role: "member",
         status: "active",
-        agent: {
-          id: "agent-002",
-          name: "other-agent",
-          capabilities: ["review"],
-          agent_type: "reviewer",
-          health: "online",
-          webhook_url: null,
-        },
+        agentId: "agent-002",
+        agentName: "other-agent",
+        agentCapabilities: ["review"],
+        agentType: "reviewer",
+        agentHealth: "online",
+        agentWebhookUrl: null,
       },
     ]);
-
-    const filesChain = createMockSupabaseClient().chain;
-    mockResolve(filesChain, [
+    // db.select() for files
+    pushResult([
       {
         id: "file-001",
         file_name: "readme.md",
@@ -159,12 +153,6 @@ describe("GET /api/v1/projects/[id]", () => {
         file_size: 1024,
       },
     ]);
-
-    mockSupabase.from
-      .mockReturnValueOnce(membershipChain)
-      .mockReturnValueOnce(projectChain)
-      .mockReturnValueOnce(teamChain)
-      .mockReturnValueOnce(filesChain);
 
     const request = new NextRequest("http://localhost/api/v1/projects/proj-001", {
       method: "GET",
@@ -186,32 +174,25 @@ describe("GET /api/v1/projects/[id]", () => {
   });
 
   it("returns empty files array when project has no files", async () => {
-    const membershipChain = createMockSupabaseClient().chain;
-    mockResolve(membershipChain, { role: "member" });
-
-    const projectChain = createMockSupabaseClient().chain;
-    mockResolve(projectChain, {
-      id: "proj-001",
-      name: "Test Project",
-      description: null,
-      instructions: null,
-      orchestration_mode: "collaborative",
-      status: "active",
-      created_at: "2026-01-01T00:00:00Z",
-      updated_at: "2026-01-02T00:00:00Z",
-    });
-
-    const teamChain = createMockSupabaseClient().chain;
-    mockResolve(teamChain, []);
-
-    const filesChain = createMockSupabaseClient().chain;
-    mockResolve(filesChain, []);
-
-    mockSupabase.from
-      .mockReturnValueOnce(membershipChain)
-      .mockReturnValueOnce(projectChain)
-      .mockReturnValueOnce(teamChain)
-      .mockReturnValueOnce(filesChain);
+    // db.select() for membership
+    pushResult([{ role: "member" }]);
+    // db.select() for project
+    pushResult([
+      {
+        id: "proj-001",
+        name: "Test Project",
+        description: null,
+        instructions: null,
+        orchestration_mode: "collaborative",
+        status: "active",
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-02T00:00:00Z",
+      },
+    ]);
+    // db.select() for team
+    pushResult([]);
+    // db.select() for files
+    pushResult([]);
 
     const request = new NextRequest("http://localhost/api/v1/projects/proj-001", {
       method: "GET",
@@ -226,45 +207,36 @@ describe("GET /api/v1/projects/[id]", () => {
   });
 
   it("returns team with only self when no other agents", async () => {
-    const membershipChain = createMockSupabaseClient().chain;
-    mockResolve(membershipChain, { role: "lead" });
-
-    const projectChain = createMockSupabaseClient().chain;
-    mockResolve(projectChain, {
-      id: "proj-001",
-      name: "Solo Project",
-      description: null,
-      instructions: null,
-      orchestration_mode: "solo",
-      status: "active",
-      created_at: "2026-01-01T00:00:00Z",
-      updated_at: "2026-01-02T00:00:00Z",
-    });
-
-    const teamChain = createMockSupabaseClient().chain;
-    mockResolve(teamChain, [
+    // db.select() for membership
+    pushResult([{ role: "lead" }]);
+    // db.select() for project
+    pushResult([
+      {
+        id: "proj-001",
+        name: "Solo Project",
+        description: null,
+        instructions: null,
+        orchestration_mode: "solo",
+        status: "active",
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-02T00:00:00Z",
+      },
+    ]);
+    // db.select() for team
+    pushResult([
       {
         role: "lead",
         status: "active",
-        agent: {
-          id: "agent-001",
-          name: "test-agent",
-          capabilities: ["code"],
-          agent_type: "developer",
-          health: "online",
-          webhook_url: null,
-        },
+        agentId: "agent-001",
+        agentName: "test-agent",
+        agentCapabilities: ["code"],
+        agentType: "developer",
+        agentHealth: "online",
+        agentWebhookUrl: null,
       },
     ]);
-
-    const filesChain = createMockSupabaseClient().chain;
-    mockResolve(filesChain, []);
-
-    mockSupabase.from
-      .mockReturnValueOnce(membershipChain)
-      .mockReturnValueOnce(projectChain)
-      .mockReturnValueOnce(teamChain)
-      .mockReturnValueOnce(filesChain);
+    // db.select() for files
+    pushResult([]);
 
     const request = new NextRequest("http://localhost/api/v1/projects/proj-001", {
       method: "GET",
@@ -279,27 +251,26 @@ describe("GET /api/v1/projects/[id]", () => {
     expect(json.team[0].agent.id).toBe("agent-001");
   });
 
-  it("returns files with signed_url field", async () => {
-    const membershipChain = createMockSupabaseClient().chain;
-    mockResolve(membershipChain, { role: "member" });
-
-    const projectChain = createMockSupabaseClient().chain;
-    mockResolve(projectChain, {
-      id: "proj-001",
-      name: "Test Project",
-      description: null,
-      instructions: null,
-      orchestration_mode: "collaborative",
-      status: "active",
-      created_at: "2026-01-01T00:00:00Z",
-      updated_at: "2026-01-02T00:00:00Z",
-    });
-
-    const teamChain = createMockSupabaseClient().chain;
-    mockResolve(teamChain, []);
-
-    const filesChain = createMockSupabaseClient().chain;
-    mockResolve(filesChain, [
+  it("returns files with url field", async () => {
+    // db.select() for membership
+    pushResult([{ role: "member" }]);
+    // db.select() for project
+    pushResult([
+      {
+        id: "proj-001",
+        name: "Test Project",
+        description: null,
+        instructions: null,
+        orchestration_mode: "collaborative",
+        status: "active",
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-02T00:00:00Z",
+      },
+    ]);
+    // db.select() for team
+    pushResult([]);
+    // db.select() for files
+    pushResult([
       {
         id: "file-001",
         file_name: "readme.md",
@@ -308,21 +279,6 @@ describe("GET /api/v1/projects/[id]", () => {
         file_size: 1024,
       },
     ]);
-
-    mockSupabase.from
-      .mockReturnValueOnce(membershipChain)
-      .mockReturnValueOnce(projectChain)
-      .mockReturnValueOnce(teamChain)
-      .mockReturnValueOnce(filesChain);
-
-    (mockSupabase.client as Record<string, unknown>).storage = {
-      from: vi.fn().mockReturnValue({
-        createSignedUrl: vi.fn().mockResolvedValue({
-          data: { signedUrl: "https://storage.example.com/signed/readme.md" },
-          error: null,
-        }),
-      }),
-    };
 
     const request = new NextRequest("http://localhost/api/v1/projects/proj-001", {
       method: "GET",
@@ -334,49 +290,40 @@ describe("GET /api/v1/projects/[id]", () => {
 
     expect(response.status).toBe(200);
     expect(json.files).toHaveLength(1);
-    expect(json.files[0].signed_url).toBe("https://storage.example.com/signed/readme.md");
+    expect(json.files[0].url).toBe("https://storage.example.com/proj-001/readme.md");
   });
 
   it("verifies has_webhook is boolean (not the URL string)", async () => {
-    const membershipChain = createMockSupabaseClient().chain;
-    mockResolve(membershipChain, { role: "member" });
-
-    const projectChain = createMockSupabaseClient().chain;
-    mockResolve(projectChain, {
-      id: "proj-001",
-      name: "Test Project",
-      description: null,
-      instructions: null,
-      orchestration_mode: "collaborative",
-      status: "active",
-      created_at: "2026-01-01T00:00:00Z",
-      updated_at: "2026-01-02T00:00:00Z",
-    });
-
-    const teamChain = createMockSupabaseClient().chain;
-    mockResolve(teamChain, [
+    // db.select() for membership
+    pushResult([{ role: "member" }]);
+    // db.select() for project
+    pushResult([
+      {
+        id: "proj-001",
+        name: "Test Project",
+        description: null,
+        instructions: null,
+        orchestration_mode: "collaborative",
+        status: "active",
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-02T00:00:00Z",
+      },
+    ]);
+    // db.select() for team
+    pushResult([
       {
         role: "member",
         status: "active",
-        agent: {
-          id: "agent-002",
-          name: "webhook-agent",
-          capabilities: ["deploy"],
-          agent_type: "deployer",
-          health: "online",
-          webhook_url: "https://example.com/webhook",
-        },
+        agentId: "agent-002",
+        agentName: "webhook-agent",
+        agentCapabilities: ["deploy"],
+        agentType: "deployer",
+        agentHealth: "online",
+        agentWebhookUrl: "https://example.com/webhook",
       },
     ]);
-
-    const filesChain = createMockSupabaseClient().chain;
-    mockResolve(filesChain, []);
-
-    mockSupabase.from
-      .mockReturnValueOnce(membershipChain)
-      .mockReturnValueOnce(projectChain)
-      .mockReturnValueOnce(teamChain)
-      .mockReturnValueOnce(filesChain);
+    // db.select() for files
+    pushResult([]);
 
     const request = new NextRequest("http://localhost/api/v1/projects/proj-001", {
       method: "GET",

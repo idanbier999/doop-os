@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateAgent } from "@/lib/api-auth";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { getDb } from "@/lib/db/client";
+import { tasks, activityLog } from "@/lib/db/schema";
+import { eq, and } from "drizzle-orm";
 import { withRateLimit } from "@/lib/api-rate-limit";
 import { isValidTransition } from "@/lib/task-status";
 import { notifyLeadAgent } from "@/lib/task-delivery";
-import type { Json } from "@/lib/database.types";
 
 async function handlePost(request: NextRequest, context?: unknown) {
   const agent = await authenticateAgent(request);
@@ -23,21 +24,26 @@ async function handlePost(request: NextRequest, context?: unknown) {
     // Body is empty or invalid JSON — result is optional
   }
 
-  const supabase = createAdminClient();
+  const db = getDb();
 
   // Verify task exists and belongs to this workspace
-  const { data: task, error: fetchError } = await supabase
-    .from("tasks")
-    .select("id, status, project_id, title")
-    .eq("id", id)
-    .eq("workspace_id", agent.workspace_id)
-    .single();
+  const taskRows = await db
+    .select({
+      id: tasks.id,
+      status: tasks.status,
+      projectId: tasks.projectId,
+      title: tasks.title,
+    })
+    .from(tasks)
+    .where(and(eq(tasks.id, id), eq(tasks.workspaceId, agent.workspaceId)))
+    .limit(1);
 
-  if (fetchError || !task) {
+  const task = taskRows[0];
+  if (!task) {
     return NextResponse.json({ error: "Task not found" }, { status: 404 });
   }
 
-  const currentStatus = task.status as string;
+  const currentStatus = task.status;
   if (!isValidTransition(currentStatus, "completed")) {
     return NextResponse.json(
       { error: `Cannot complete task with status '${currentStatus}'` },
@@ -46,39 +52,35 @@ async function handlePost(request: NextRequest, context?: unknown) {
   }
 
   // Mark task as completed with optimistic lock on current status
-  const { error: updateError } = await supabase
-    .from("tasks")
-    .update({
+  const updateResult = await db
+    .update(tasks)
+    .set({
       status: "completed",
-      result: (body.result as Json) ?? null,
-      agent_id: agent.id,
-      updated_at: new Date().toISOString(),
+      result: body.result ?? null,
+      agentId: agent.id,
+      updatedAt: new Date(),
     })
-    .eq("id", id)
-    .eq("status", currentStatus);
+    .where(and(eq(tasks.id, id), eq(tasks.status, currentStatus)))
+    .returning({ id: tasks.id });
 
-  if (updateError?.code === "PGRST116") {
+  if (updateResult.length === 0) {
     return NextResponse.json({ error: "Conflict: task status has changed" }, { status: 409 });
   }
 
-  if (updateError) {
-    return NextResponse.json({ error: "Failed to complete task" }, { status: 500 });
-  }
-
   // Activity log
-  await supabase.from("activity_log").insert({
-    workspace_id: agent.workspace_id,
-    agent_id: agent.id,
+  await db.insert(activityLog).values({
+    workspaceId: agent.workspaceId,
+    agentId: agent.id,
     action: "task_completed",
     details: {
       task_id: id,
       changes: { old_status: currentStatus, new_status: "completed" },
-    } as unknown as Json,
+    },
   });
 
   // Notify lead agent on status change
-  if (task.project_id) {
-    void notifyLeadAgent(task.project_id as string, "task.status_changed", {
+  if (task.projectId) {
+    void notifyLeadAgent(task.projectId, "task.status_changed", {
       task_id: id,
       title: task.title,
       old_status: currentStatus,

@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { authenticateAgent } from "@/lib/api-auth";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { getDb } from "@/lib/db/client";
+import { tasks, projectAgents, taskAgents, activityLog } from "@/lib/db/schema";
+import { eq, and } from "drizzle-orm";
 import { withRateLimit } from "@/lib/api-rate-limit";
-import type { Json } from "@/lib/database.types";
 
 const assignBodySchema = z
   .object({
@@ -37,21 +38,21 @@ async function handlePost(request: NextRequest, context?: unknown) {
   }
 
   const { agent_id: targetAgentId, role } = parsed.data;
-  const supabase = createAdminClient();
+  const db = getDb();
 
   // Verify task exists and has a project
-  const { data: task, error: taskError } = await supabase
-    .from("tasks")
-    .select("id, project_id")
-    .eq("id", taskId)
-    .eq("workspace_id", agent.workspace_id)
-    .single();
+  const taskRows = await db
+    .select({ id: tasks.id, projectId: tasks.projectId })
+    .from(tasks)
+    .where(and(eq(tasks.id, taskId), eq(tasks.workspaceId, agent.workspaceId)))
+    .limit(1);
 
-  if (taskError || !task) {
+  const task = taskRows[0];
+  if (!task) {
     return NextResponse.json({ error: "Task not found" }, { status: 404 });
   }
 
-  if (!task.project_id) {
+  if (!task.projectId) {
     return NextResponse.json(
       { error: "Task must belong to a project to assign agents" },
       { status: 422 }
@@ -59,14 +60,14 @@ async function handlePost(request: NextRequest, context?: unknown) {
   }
 
   // Verify caller is lead of the task's project
-  const { data: callerMembership, error: callerError } = await supabase
-    .from("project_agents")
-    .select("role")
-    .eq("project_id", task.project_id)
-    .eq("agent_id", agent.id)
-    .single();
+  const callerMembershipRows = await db
+    .select({ role: projectAgents.role })
+    .from(projectAgents)
+    .where(and(eq(projectAgents.projectId, task.projectId), eq(projectAgents.agentId, agent.id)))
+    .limit(1);
 
-  if (callerError || !callerMembership || callerMembership.role !== "lead") {
+  const callerMembership = callerMembershipRows[0];
+  if (!callerMembership || callerMembership.role !== "lead") {
     return NextResponse.json(
       { error: "Only project leads can assign agents to tasks" },
       { status: 403 }
@@ -74,14 +75,15 @@ async function handlePost(request: NextRequest, context?: unknown) {
   }
 
   // Verify target agent is a member of the same project
-  const { data: targetMembership, error: targetError } = await supabase
-    .from("project_agents")
-    .select("agent_id")
-    .eq("project_id", task.project_id)
-    .eq("agent_id", targetAgentId)
-    .single();
+  const targetMembershipRows = await db
+    .select({ agentId: projectAgents.agentId })
+    .from(projectAgents)
+    .where(
+      and(eq(projectAgents.projectId, task.projectId), eq(projectAgents.agentId, targetAgentId))
+    )
+    .limit(1);
 
-  if (targetError || !targetMembership) {
+  if (targetMembershipRows.length === 0) {
     return NextResponse.json(
       { error: "Target agent is not a member of this project" },
       { status: 422 }
@@ -89,44 +91,42 @@ async function handlePost(request: NextRequest, context?: unknown) {
   }
 
   // Upsert into task_agents: check existing, update or insert
-  const { data: existing } = await supabase
-    .from("task_agents")
-    .select("id")
-    .eq("task_id", taskId)
-    .eq("agent_id", targetAgentId)
-    .maybeSingle();
+  const existingRows = await db
+    .select({ id: taskAgents.id })
+    .from(taskAgents)
+    .where(and(eq(taskAgents.taskId, taskId), eq(taskAgents.agentId, targetAgentId)))
+    .limit(1);
 
-  if (existing) {
-    const { error: updateError } = await supabase
-      .from("task_agents")
-      .update({ role })
-      .eq("task_id", taskId)
-      .eq("agent_id", targetAgentId);
-
-    if (updateError) {
+  if (existingRows.length > 0) {
+    try {
+      await db
+        .update(taskAgents)
+        .set({ role })
+        .where(and(eq(taskAgents.taskId, taskId), eq(taskAgents.agentId, targetAgentId)));
+    } catch {
       return NextResponse.json({ error: "Failed to update assignment" }, { status: 500 });
     }
   } else {
-    const { error: insertError } = await supabase.from("task_agents").insert({
-      task_id: taskId,
-      agent_id: targetAgentId,
-      role,
-    });
-
-    if (insertError) {
+    try {
+      await db.insert(taskAgents).values({
+        taskId,
+        agentId: targetAgentId,
+        role,
+      });
+    } catch {
       return NextResponse.json({ error: "Failed to assign agent" }, { status: 500 });
     }
   }
 
-  await supabase.from("activity_log").insert({
-    workspace_id: agent.workspace_id,
-    agent_id: agent.id,
+  await db.insert(activityLog).values({
+    workspaceId: agent.workspaceId,
+    agentId: agent.id,
     action: "task_agent_assigned",
     details: {
       task_id: taskId,
       assigned_agent_id: targetAgentId,
       role,
-    } as unknown as Json,
+    },
   });
 
   return NextResponse.json({ task_id: taskId, agent_id: targetAgentId, role });

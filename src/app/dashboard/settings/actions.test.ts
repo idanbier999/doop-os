@@ -1,52 +1,32 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
-import { createMockSupabaseClient, mockResolve, mockReject } from "@/__tests__/mocks/supabase";
-import { mockSession } from "@/__tests__/mocks/auth";
+import { createMockDb } from "@/__tests__/mocks/drizzle";
+import { mockUser } from "@/__tests__/mocks/auth";
 
-// ---------- module-level mocks ----------
-let mockSupabase: ReturnType<typeof createMockSupabaseClient>;
+const { mockDb, pushResult, pushError, reset } = createMockDb();
 
-vi.mock("@/lib/supabase/server-with-auth", () => ({
-  getAuthenticatedSupabase: vi.fn(),
+vi.mock("@/lib/db/client", () => ({ getDb: () => mockDb }));
+vi.mock("@/lib/auth/session", () => ({ requireAuth: vi.fn() }));
+vi.mock("@/lib/db/auth", () => ({
+  requireWorkspaceMember: vi.fn(),
+  requireWorkspaceAdmin: vi.fn(),
 }));
 
 // Mock global fetch
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
 
-// Import AFTER vi.mock
-import { getAuthenticatedSupabase } from "@/lib/supabase/server-with-auth";
+import { requireAuth } from "@/lib/auth/session";
+import { requireWorkspaceMember, requireWorkspaceAdmin } from "@/lib/db/auth";
 import { testWebhook, testSlackWebhook } from "./actions";
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockSupabase = createMockSupabaseClient();
-  (getAuthenticatedSupabase as any).mockResolvedValue({
-    user: mockSession.user,
-    supabase: mockSupabase.client,
-    session: mockSession,
-  });
+  reset();
+  (requireAuth as any).mockResolvedValue(mockUser);
+  (requireWorkspaceMember as any).mockResolvedValue({ role: "owner" });
+  (requireWorkspaceAdmin as any).mockResolvedValue(undefined);
   mockFetch.mockReset();
 });
-
-// ───────────────────── helpers ─────────────────────
-
-function memberChainOk(role = "owner") {
-  const c = createMockSupabaseClient().chain;
-  mockResolve(c, { role });
-  return c;
-}
-
-function okChain(data: unknown = null) {
-  const c = createMockSupabaseClient().chain;
-  mockResolve(c, data);
-  return c;
-}
-
-function errChain(msg: string) {
-  const c = createMockSupabaseClient().chain;
-  mockReject(c, { message: msg });
-  return c;
-}
 
 // ───────────────────── testWebhook ─────────────────────
 
@@ -55,18 +35,14 @@ describe("testWebhook", () => {
   const workspaceId = "ws-1";
 
   it("returns error when not authenticated", async () => {
-    (getAuthenticatedSupabase as any).mockResolvedValue({
-      user: null,
-      supabase: null,
-      session: null,
-    });
+    (requireAuth as any).mockRejectedValue(new Error("Unauthorized"));
 
     const result = await testWebhook(agentId, workspaceId);
     expect(result).toEqual({ success: false, error: "Not authenticated" });
   });
 
   it("returns error when not a workspace member", async () => {
-    mockSupabase.from.mockReturnValueOnce(errChain("No rows"));
+    (requireWorkspaceMember as any).mockRejectedValue(new Error("Not a member"));
 
     const result = await testWebhook(agentId, workspaceId);
     expect(result).toEqual({
@@ -76,16 +52,14 @@ describe("testWebhook", () => {
   });
 
   it("returns error when agent has no webhook URL", async () => {
-    // 1. workspace_members
-    mockSupabase.from.mockReturnValueOnce(memberChainOk());
-    // 2. agents
-    mockSupabase.from.mockReturnValueOnce(
-      okChain({
-        webhook_url: null,
-        webhook_secret: "sec",
-        workspace_id: workspaceId,
-      })
-    );
+    // 1. db.select(agents) -> agent with no webhook_url
+    pushResult([
+      {
+        webhookUrl: null,
+        webhookSecret: "sec",
+        workspaceId: workspaceId,
+      },
+    ]);
 
     const result = await testWebhook(agentId, workspaceId);
     expect(result).toEqual({
@@ -95,16 +69,14 @@ describe("testWebhook", () => {
   });
 
   it("returns success on successful webhook delivery", async () => {
-    // 1. workspace_members
-    mockSupabase.from.mockReturnValueOnce(memberChainOk());
-    // 2. agents
-    mockSupabase.from.mockReturnValueOnce(
-      okChain({
-        webhook_url: "https://example.com/hook",
-        webhook_secret: "secret123",
-        workspace_id: workspaceId,
-      })
-    );
+    // 1. db.select(agents)
+    pushResult([
+      {
+        webhookUrl: "https://example.com/hook",
+        webhookSecret: "secret123",
+        workspaceId: workspaceId,
+      },
+    ]);
 
     mockFetch.mockResolvedValueOnce({
       ok: true,
@@ -127,16 +99,14 @@ describe("testWebhook", () => {
   });
 
   it("returns error with status code on failed delivery", async () => {
-    // 1. workspace_members
-    mockSupabase.from.mockReturnValueOnce(memberChainOk());
-    // 2. agents
-    mockSupabase.from.mockReturnValueOnce(
-      okChain({
-        webhook_url: "https://example.com/hook",
-        webhook_secret: null,
-        workspace_id: workspaceId,
-      })
-    );
+    // 1. db.select(agents)
+    pushResult([
+      {
+        webhookUrl: "https://example.com/hook",
+        webhookSecret: null,
+        workspaceId: workspaceId,
+      },
+    ]);
 
     mockFetch.mockResolvedValueOnce({
       ok: false,
@@ -158,37 +128,30 @@ describe("testSlackWebhook", () => {
   const workspaceId = "ws-1";
 
   it("returns error when not authenticated", async () => {
-    (getAuthenticatedSupabase as any).mockResolvedValue({
-      user: null,
-      supabase: null,
-      session: null,
-    });
+    (requireAuth as any).mockRejectedValue(new Error("Unauthorized"));
 
     const result = await testSlackWebhook(workspaceId);
     expect(result).toEqual({ success: false, error: "Not authenticated" });
   });
 
   it("returns error when role is not owner/admin", async () => {
-    // 1. workspace_members (member role)
-    mockSupabase.from.mockReturnValueOnce(memberChainOk("member"));
+    (requireWorkspaceAdmin as any).mockRejectedValue(new Error("Insufficient permissions"));
 
     const result = await testSlackWebhook(workspaceId);
     expect(result).toEqual({
       success: false,
-      error: "Insufficient permissions",
+      error: "Not a member of this workspace",
     });
   });
 
   it("returns error when Slack is disabled", async () => {
-    // 1. workspace_members
-    mockSupabase.from.mockReturnValueOnce(memberChainOk("admin"));
-    // 2. notification_settings
-    mockSupabase.from.mockReturnValueOnce(
-      okChain({
-        slack_enabled: false,
-        slack_webhook_url: "https://hooks.slack.com/services/xxx",
-      })
-    );
+    // 1. db.select(notificationSettings)
+    pushResult([
+      {
+        slackEnabled: false,
+        slackWebhookUrl: "https://hooks.slack.com/services/xxx",
+      },
+    ]);
 
     const result = await testSlackWebhook(workspaceId);
     expect(result).toEqual({
@@ -198,15 +161,13 @@ describe("testSlackWebhook", () => {
   });
 
   it("returns error when webhook URL is empty", async () => {
-    // 1. workspace_members
-    mockSupabase.from.mockReturnValueOnce(memberChainOk("owner"));
-    // 2. notification_settings
-    mockSupabase.from.mockReturnValueOnce(
-      okChain({
-        slack_enabled: true,
-        slack_webhook_url: "",
-      })
-    );
+    // 1. db.select(notificationSettings)
+    pushResult([
+      {
+        slackEnabled: true,
+        slackWebhookUrl: "",
+      },
+    ]);
 
     const result = await testSlackWebhook(workspaceId);
     expect(result).toEqual({
@@ -216,17 +177,15 @@ describe("testSlackWebhook", () => {
   });
 
   it("returns success on successful Slack delivery", async () => {
-    // 1. workspace_members
-    mockSupabase.from.mockReturnValueOnce(memberChainOk("owner"));
-    // 2. notification_settings
-    mockSupabase.from.mockReturnValueOnce(
-      okChain({
-        slack_enabled: true,
-        slack_webhook_url: "https://hooks.slack.com/services/T00/B00/xxx",
-      })
-    );
-    // 3. workspaces (fetch workspace name)
-    mockSupabase.from.mockReturnValueOnce(okChain({ name: "My Workspace" }));
+    // 1. db.select(notificationSettings)
+    pushResult([
+      {
+        slackEnabled: true,
+        slackWebhookUrl: "https://hooks.slack.com/services/T00/B00/xxx",
+      },
+    ]);
+    // 2. db.select(workspaces) -> workspace name
+    pushResult([{ name: "My Workspace" }]);
 
     mockFetch.mockResolvedValueOnce({
       ok: true,

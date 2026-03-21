@@ -1,10 +1,9 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { useRealtime } from "@/hooks/use-realtime";
+import { useRealtimeEvents } from "@/hooks/use-realtime-events";
 import { Badge } from "@/components/ui/badge";
 import { relativeTime } from "@/lib/utils";
-import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 
 export interface ProjectAgentInfo {
   id: string;
@@ -16,7 +15,7 @@ export interface ProjectAgentInfo {
     name: string;
     health: string;
     stage: string;
-    webhook_url?: string | null;
+    webhookUrl?: string | null;
   };
   currentTask?: {
     id: string;
@@ -167,10 +166,10 @@ function AgentCard({ info }: { info: ProjectAgentInfo }) {
 export function AgentProgressPanel({ agents: initialAgents, projectId }: AgentProgressPanelProps) {
   const [agents, setAgents] = useState<ProjectAgentInfo[]>(initialAgents);
 
-  const handleAgentUpdate = useCallback(
-    (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
-      if (payload.eventType === "UPDATE") {
-        const updated = payload.new as { id: string; status?: string };
+  const handleAgentEvent = useCallback(
+    (event: { event: string; new?: Record<string, unknown> }) => {
+      if (event.event === "UPDATE") {
+        const updated = event.new as { id: string; status?: string };
         setAgents((prev) =>
           prev.map((a) =>
             a.id === updated.id
@@ -188,10 +187,9 @@ export function AgentProgressPanel({ agents: initialAgents, projectId }: AgentPr
     []
   );
 
-  useRealtime({
+  useRealtimeEvents({
     table: "project_agents",
-    filter: `project_id=eq.${projectId}`,
-    onPayload: handleAgentUpdate,
+    onEvent: handleAgentEvent,
   });
 
   if (agents.length === 0) {

@@ -1,14 +1,13 @@
 "use client";
 
 import { useState, useCallback, useMemo } from "react";
-import { useRealtime } from "@/hooks/use-realtime";
+import { useRealtimeEvents } from "@/hooks/use-realtime-events";
 import { Table, Thead, Tbody, Tr, Th, Td } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ProblemFilters } from "@/components/problems/problem-filters";
 import { ProblemActions } from "@/components/problems/problem-actions";
 import { formatDate } from "@/lib/utils";
-import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 
 type ProblemWithAgent = {
   id: string;
@@ -58,10 +57,10 @@ export function ProblemsTable({ initialProblems, agents }: ProblemsTableProps) {
     }
   };
 
-  const handlePayload = useCallback(
-    (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
-      if (payload.eventType === "INSERT") {
-        const newProblem = payload.new as ProblemWithAgent;
+  const handleEvent = useCallback(
+    (event: { event: string; new?: Record<string, unknown>; old?: Record<string, unknown> }) => {
+      if (event.event === "INSERT") {
+        const newProblem = event.new as ProblemWithAgent;
         const agentData = agents.find(
           (a) => a.id === (newProblem as { agent_id?: string }).agent_id
         );
@@ -72,13 +71,13 @@ export function ProblemsTable({ initialProblems, agents }: ProblemsTableProps) {
           },
           ...prev,
         ]);
-      } else if (payload.eventType === "UPDATE") {
-        const updated = payload.new as ProblemWithAgent;
+      } else if (event.event === "UPDATE") {
+        const updated = event.new as ProblemWithAgent;
         setProblems((prev) =>
           prev.map((p) => (p.id === updated.id ? { ...updated, agents: p.agents } : p))
         );
-      } else if (payload.eventType === "DELETE") {
-        const old = payload.old as { id?: string };
+      } else if (event.event === "DELETE") {
+        const old = event.old as { id?: string };
         if (old.id) {
           setProblems((prev) => prev.filter((p) => p.id !== old.id));
         }
@@ -87,9 +86,9 @@ export function ProblemsTable({ initialProblems, agents }: ProblemsTableProps) {
     [agents]
   );
 
-  useRealtime({
+  useRealtimeEvents({
     table: "problems",
-    onPayload: handlePayload,
+    onEvent: handleEvent,
   });
 
   const filtered = useMemo(() => {

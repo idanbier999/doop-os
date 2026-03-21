@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateAgent } from "@/lib/api-auth";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { getDb } from "@/lib/db/client";
+import { agentQuotas } from "@/lib/db/schema";
+import { eq, and, isNull } from "drizzle-orm";
 import { checkAndRecordRequest } from "@/lib/rate-limiter";
 
 interface Quota {
@@ -21,7 +23,7 @@ const DEFAULT_QUOTA: Quota = {
 const CACHE_TTL_MS = 60_000; // 60 seconds
 const quotaCache = new Map<string, CachedQuota>();
 
-/** Reset the in-memory quota cache — exported for testing. */
+/** Reset the in-memory quota cache -- exported for testing. */
 export function resetQuotaCache(): void {
   quotaCache.clear();
 }
@@ -34,43 +36,47 @@ async function getQuota(agentId: string, workspaceId: string): Promise<Quota> {
   }
 
   try {
-    const supabase = createAdminClient();
+    const db = getDb();
 
     // Try agent-specific quota first
-    const { data: agentQuota } = await supabase
-      .from("agent_quotas")
-      .select("max_requests_per_minute, max_requests_per_hour")
-      .eq("agent_id", agentId)
-      .eq("workspace_id", workspaceId)
-      .single();
+    const agentQuotaRows = await db
+      .select({
+        maxPerMinute: agentQuotas.maxRequestsPerMinute,
+        maxPerHour: agentQuotas.maxRequestsPerHour,
+      })
+      .from(agentQuotas)
+      .where(and(eq(agentQuotas.agentId, agentId), eq(agentQuotas.workspaceId, workspaceId)))
+      .limit(1);
 
-    if (agentQuota) {
+    if (agentQuotaRows[0]) {
       const quota: Quota = {
-        maxPerMinute: agentQuota.max_requests_per_minute,
-        maxPerHour: agentQuota.max_requests_per_hour,
+        maxPerMinute: agentQuotaRows[0].maxPerMinute,
+        maxPerHour: agentQuotaRows[0].maxPerHour,
       };
       quotaCache.set(cacheKey, { quota, expiresAt: Date.now() + CACHE_TTL_MS });
       return quota;
     }
 
     // Try workspace default (agent_id IS NULL)
-    const { data: workspaceQuota } = await supabase
-      .from("agent_quotas")
-      .select("max_requests_per_minute, max_requests_per_hour")
-      .is("agent_id", null)
-      .eq("workspace_id", workspaceId)
-      .single();
+    const workspaceQuotaRows = await db
+      .select({
+        maxPerMinute: agentQuotas.maxRequestsPerMinute,
+        maxPerHour: agentQuotas.maxRequestsPerHour,
+      })
+      .from(agentQuotas)
+      .where(and(isNull(agentQuotas.agentId), eq(agentQuotas.workspaceId, workspaceId)))
+      .limit(1);
 
-    if (workspaceQuota) {
+    if (workspaceQuotaRows[0]) {
       const quota: Quota = {
-        maxPerMinute: workspaceQuota.max_requests_per_minute,
-        maxPerHour: workspaceQuota.max_requests_per_hour,
+        maxPerMinute: workspaceQuotaRows[0].maxPerMinute,
+        maxPerHour: workspaceQuotaRows[0].maxPerHour,
       };
       quotaCache.set(cacheKey, { quota, expiresAt: Date.now() + CACHE_TTL_MS });
       return quota;
     }
   } catch {
-    // Fail open — use defaults
+    // Fail open -- use defaults
   }
 
   // Hardcoded default
@@ -95,12 +101,12 @@ export function withRateLimit(handler: RouteHandler): RouteHandler {
   return async (request: NextRequest, context?: unknown) => {
     const agent = await authenticateAgent(request);
 
-    // If auth fails, pass through — let the handler return 401 itself
+    // If auth fails, pass through -- let the handler return 401 itself
     if (!agent) {
       return handler(request, context);
     }
 
-    const quota = await getQuota(agent.id, agent.workspace_id);
+    const quota = await getQuota(agent.id, agent.workspaceId);
 
     // Check minute window
     const minuteResult = await checkAndRecordRequest(agent.id, "minute", quota.maxPerMinute);

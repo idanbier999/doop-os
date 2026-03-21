@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useSupabase } from "@/hooks/use-supabase";
 import { CreateWorkspaceStep } from "@/components/onboarding/create-workspace-step";
 import { RegisterAgentStep } from "@/components/onboarding/register-agent-step";
 import { DoneStep } from "@/components/onboarding/done-step";
@@ -11,7 +10,6 @@ const steps = ["Set Up Control Plane", "Connect Agent", "Done"];
 export function OnboardingWizard() {
   const [step, setStep] = useState(0);
   const [workspaceId, setWorkspaceId] = useState<string>("");
-  const supabase = useSupabase();
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-mac-light-gray p-4">
@@ -43,7 +41,6 @@ export function OnboardingWizard() {
         <div className="rounded-lg border border-mac-border bg-mac-white p-6">
           {step === 0 && (
             <CreateWorkspaceStep
-              supabase={supabase}
               onComplete={(id: string) => {
                 setWorkspaceId(id);
                 setStep(1);

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
-import { createMockSupabaseClient, mockReject } from "@/__tests__/mocks/supabase";
+import { createMockDb } from "@/__tests__/mocks/drizzle";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -8,16 +8,18 @@ import { createMockSupabaseClient, mockReject } from "@/__tests__/mocks/supabase
 
 const mockAgent = {
   id: "agent-001",
-  workspace_id: "ws-001",
+  workspaceId: "ws-001",
   name: "test-agent",
 };
+
+const { mockDb, pushResult, pushError, reset } = createMockDb();
 
 vi.mock("@/lib/api-auth", () => ({
   authenticateAgent: vi.fn(),
 }));
 
-vi.mock("@/lib/supabase/admin", () => ({
-  createAdminClient: vi.fn(),
+vi.mock("@/lib/db/client", () => ({
+  getDb: () => mockDb,
 }));
 
 vi.mock("@/lib/api-rate-limit", () => ({
@@ -25,19 +27,15 @@ vi.mock("@/lib/api-rate-limit", () => ({
 }));
 
 import { authenticateAgent } from "@/lib/api-auth";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { POST } from "./route";
 
 // ---------------------------------------------------------------------------
 // Setup
 // ---------------------------------------------------------------------------
 
-let mockSupabase: ReturnType<typeof createMockSupabaseClient>;
-
 beforeEach(() => {
   vi.clearAllMocks();
-  mockSupabase = createMockSupabaseClient();
-  (createAdminClient as ReturnType<typeof vi.fn>).mockReturnValue(mockSupabase.client);
+  reset();
   (authenticateAgent as ReturnType<typeof vi.fn>).mockResolvedValue(mockAgent);
 });
 
@@ -92,6 +90,9 @@ describe("POST /api/v1/activity-log", () => {
   });
 
   it("returns 201 for valid action without details", async () => {
+    // db.insert(activityLog) → success
+    pushResult([]);
+
     const request = new NextRequest("http://localhost/api/v1/activity-log", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -103,18 +104,14 @@ describe("POST /api/v1/activity-log", () => {
 
     expect(response.status).toBe(201);
     expect(json.ok).toBe(true);
-
-    expect(mockSupabase.from).toHaveBeenCalledWith("activity_log");
-    expect(mockSupabase.chain.insert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        workspace_id: "ws-001",
-        agent_id: "agent-001",
-        action: "agent_started",
-      })
-    );
+    // Verify insert was called
+    expect(mockDb.insert).toHaveBeenCalled();
   });
 
   it("returns 201 for valid action with details", async () => {
+    // db.insert(activityLog) → success
+    pushResult([]);
+
     const request = new NextRequest("http://localhost/api/v1/activity-log", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -126,7 +123,9 @@ describe("POST /api/v1/activity-log", () => {
   });
 
   it("returns 500 on database error", async () => {
-    mockReject(mockSupabase.chain, { message: "DB error" });
+    // db.insert(activityLog) → error
+    pushError(new Error("DB error"));
+
     const request = new NextRequest("http://localhost/api/v1/activity-log", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

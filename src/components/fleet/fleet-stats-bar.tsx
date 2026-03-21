@@ -3,9 +3,8 @@
 import { useCallback, useState } from "react";
 import { LineChart, Line } from "recharts";
 import { Card } from "@/components/ui/card";
-import { useRealtime } from "@/hooks/use-realtime";
+import { useRealtimeEvents } from "@/hooks/use-realtime-events";
 import { useWorkspace } from "@/contexts/workspace-context";
-import { useSupabase } from "@/hooks/use-supabase";
 
 interface FleetStatsBarProps {
   initialAgentCounts: {
@@ -76,59 +75,113 @@ export function FleetStatsBar({
   yesterdayTasksInFlight,
 }: FleetStatsBarProps) {
   const { workspaceId } = useWorkspace();
-  const supabase = useSupabase();
   const [agentCounts, setAgentCounts] = useState(initialAgentCounts);
   const [openProblems, setOpenProblems] = useState(initialOpenProblems);
   const [tasksInFlight, setTasksInFlight] = useState(initialTasksInFlight);
 
-  const refetchAgentCounts = useCallback(async () => {
-    const { data } = await supabase.from("agents").select("health").eq("workspace_id", workspaceId);
+  // On any relevant table change, trigger a page-level re-fetch for fresh stats
+  const handleEvent = useCallback(() => {
+    // Use router.refresh()-equivalent: re-fetch the server component data
+    // Since we can't access router here cleanly (this is a stats bar),
+    // we use window location reload sparingly. Instead, rely on SSE event data
+    // to update counts optimistically where possible.
+  }, []);
 
-    if (data) {
-      const counts = { total: data.length, healthy: 0, degraded: 0, critical: 0, offline: 0 };
-      for (const agent of data) {
-        const h = agent.health as keyof typeof counts;
-        if (h in counts && h !== "total") {
-          counts[h]++;
+  // For agent changes, update counts optimistically from event data
+  const handleAgentEvent = useCallback(
+    (event: { event: string; new?: Record<string, unknown>; old?: Record<string, unknown> }) => {
+      if (event.event === "UPDATE" && event.new) {
+        const newHealth = event.new.health as string | undefined;
+        const oldHealth = event.old?.health as string | undefined;
+        if (newHealth && oldHealth && newHealth !== oldHealth) {
+          setAgentCounts((prev) => {
+            const counts = { ...prev };
+            if (oldHealth in counts && oldHealth !== "total") {
+              counts[oldHealth as keyof Omit<typeof counts, "total">]--;
+            }
+            if (newHealth in counts && newHealth !== "total") {
+              counts[newHealth as keyof Omit<typeof counts, "total">]++;
+            }
+            return counts;
+          });
+        }
+      } else if (event.event === "INSERT") {
+        const health = (event.new?.health as string) ?? "offline";
+        setAgentCounts((prev) => {
+          const counts = { ...prev, total: prev.total + 1 };
+          if (health in counts && health !== "total") {
+            counts[health as keyof Omit<typeof counts, "total">]++;
+          }
+          return counts;
+        });
+      } else if (event.event === "DELETE") {
+        const health = (event.old?.health as string) ?? "offline";
+        setAgentCounts((prev) => {
+          const counts = { ...prev, total: prev.total - 1 };
+          if (health in counts && health !== "total") {
+            counts[health as keyof Omit<typeof counts, "total">]--;
+          }
+          return counts;
+        });
+      }
+    },
+    []
+  );
+
+  const handleProblemEvent = useCallback(
+    (event: { event: string; new?: Record<string, unknown>; old?: Record<string, unknown> }) => {
+      if (event.event === "INSERT") {
+        const status = event.new?.status as string | undefined;
+        const severity = event.new?.severity as string | undefined;
+        if (status === "open") {
+          setOpenProblems((prev) => ({
+            total: prev.total + 1,
+            critical: severity === "critical" ? prev.critical + 1 : prev.critical,
+          }));
+        }
+      } else if (event.event === "UPDATE") {
+        const newStatus = event.new?.status as string | undefined;
+        const oldStatus = event.old?.status as string | undefined;
+        const severity = event.new?.severity as string | undefined;
+        if (oldStatus === "open" && newStatus !== "open") {
+          setOpenProblems((prev) => ({
+            total: Math.max(0, prev.total - 1),
+            critical: severity === "critical" ? Math.max(0, prev.critical - 1) : prev.critical,
+          }));
         }
       }
-      setAgentCounts(counts);
-    }
-  }, [workspaceId, supabase]);
+    },
+    []
+  );
 
-  const refetchProblems = useCallback(async () => {
-    const { data } = await supabase
-      .from("problems")
-      .select("severity, agent_id, status")
-      .eq("status", "open")
-      .in(
-        "agent_id",
-        (await supabase.from("agents").select("id").eq("workspace_id", workspaceId)).data?.map(
-          (a) => a.id
-        ) ?? []
-      );
+  const handleTaskEvent = useCallback(
+    (event: { event: string; new?: Record<string, unknown>; old?: Record<string, unknown> }) => {
+      const activeStatuses = new Set(["in_progress", "waiting_on_agent", "waiting_on_human"]);
+      if (event.event === "INSERT") {
+        const status = event.new?.status as string | undefined;
+        if (status && activeStatuses.has(status)) {
+          setTasksInFlight((prev) => prev + 1);
+        }
+      } else if (event.event === "UPDATE") {
+        const newStatus = event.new?.status as string | undefined;
+        const oldStatus = event.old?.status as string | undefined;
+        const wasActive = oldStatus ? activeStatuses.has(oldStatus) : false;
+        const isActive = newStatus ? activeStatuses.has(newStatus) : false;
+        if (wasActive && !isActive) setTasksInFlight((prev) => Math.max(0, prev - 1));
+        if (!wasActive && isActive) setTasksInFlight((prev) => prev + 1);
+      } else if (event.event === "DELETE") {
+        const status = event.old?.status as string | undefined;
+        if (status && activeStatuses.has(status)) {
+          setTasksInFlight((prev) => Math.max(0, prev - 1));
+        }
+      }
+    },
+    []
+  );
 
-    if (data) {
-      setOpenProblems({
-        total: data.length,
-        critical: data.filter((p) => p.severity === "critical").length,
-      });
-    }
-  }, [workspaceId, supabase]);
-
-  const refetchTasks = useCallback(async () => {
-    const { count } = await supabase
-      .from("tasks")
-      .select("*", { count: "exact", head: true })
-      .eq("workspace_id", workspaceId)
-      .in("status", ["in_progress", "waiting_on_agent", "waiting_on_human"]);
-
-    setTasksInFlight(count ?? 0);
-  }, [workspaceId, supabase]);
-
-  useRealtime({ table: "agents", onPayload: refetchAgentCounts });
-  useRealtime({ table: "problems", onPayload: refetchProblems });
-  useRealtime({ table: "tasks", onPayload: refetchTasks });
+  useRealtimeEvents({ table: "agents", onEvent: handleAgentEvent });
+  useRealtimeEvents({ table: "problems", onEvent: handleProblemEvent });
+  useRealtimeEvents({ table: "tasks", onEvent: handleTaskEvent });
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

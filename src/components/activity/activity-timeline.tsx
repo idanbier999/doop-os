@@ -3,7 +3,7 @@
 import { useState, useCallback, useMemo } from "react";
 import { useWorkspace } from "@/contexts/workspace-context";
 import { useNotifications } from "@/contexts/notification-context";
-import { useRealtime } from "@/hooks/use-realtime";
+import { useRealtimeEvents } from "@/hooks/use-realtime-events";
 import { ActivityItem } from "./activity-item";
 import { ActivityFilters } from "./activity-filters";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -29,11 +29,11 @@ export function ActivityTimeline({ initialEntries, agents }: ActivityTimelinePro
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
-  const handlePayload = useCallback(
-    (payload: { eventType: string; new: Record<string, unknown> }) => {
-      if (payload.eventType === "INSERT") {
-        const newEntry = payload.new as unknown as ActivityEntry;
-        if (newEntry.workspace_id === workspaceId) {
+  const handleEvent = useCallback(
+    (event: { event: string; new?: Record<string, unknown> }) => {
+      if (event.event === "INSERT") {
+        const newEntry = event.new as unknown as ActivityEntry;
+        if (newEntry.workspaceId === workspaceId) {
           setEntries((prev) => [newEntry, ...prev]);
         }
       }
@@ -41,15 +41,14 @@ export function ActivityTimeline({ initialEntries, agents }: ActivityTimelinePro
     [workspaceId]
   );
 
-  useRealtime({
+  useRealtimeEvents({
     table: "activity_log",
-    filter: `workspace_id=eq.${workspaceId}`,
-    onPayload: handlePayload,
+    onEvent: handleEvent,
   });
 
   const filtered = useMemo(() => {
     return entries.filter((entry) => {
-      if (selectedAgent && entry.agent_id !== selectedAgent) return false;
+      if (selectedAgent && entry.agentId !== selectedAgent) return false;
 
       // Category-based action filtering
       if (selectedCategory) {
@@ -61,13 +60,13 @@ export function ActivityTimeline({ initialEntries, agents }: ActivityTimelinePro
         }
       }
 
-      if (dateFrom && entry.created_at) {
-        if (new Date(entry.created_at) < new Date(dateFrom)) return false;
+      if (dateFrom && entry.createdAt) {
+        if (new Date(entry.createdAt) < new Date(dateFrom)) return false;
       }
-      if (dateTo && entry.created_at) {
+      if (dateTo && entry.createdAt) {
         const to = new Date(dateTo);
         to.setDate(to.getDate() + 1);
-        if (new Date(entry.created_at) >= to) return false;
+        if (new Date(entry.createdAt) >= to) return false;
       }
       return true;
     });

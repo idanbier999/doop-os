@@ -1,4 +1,5 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { getDb } from "@/lib/db/client";
+import { sql } from "drizzle-orm";
 
 export interface RateLimitResult {
   allowed: boolean;
@@ -14,8 +15,8 @@ const WINDOW_MS: Record<string, number> = {
 
 /**
  * Check and atomically record a request against the rate limit window.
- * Uses the `increment_rate_limit` RPC for atomic upsert (no race conditions).
- * Fails closed on DB errors — logs and returns allowed=false.
+ * Uses an atomic INSERT ... ON CONFLICT upsert (no race conditions).
+ * Fails closed on DB errors -- logs and returns allowed=false.
  */
 export async function checkAndRecordRequest(
   agentId: string,
@@ -23,23 +24,21 @@ export async function checkAndRecordRequest(
   maxRequests: number
 ): Promise<RateLimitResult> {
   const windowMs = WINDOW_MS[windowType];
-  const windowStart = new Date(Math.floor(Date.now() / windowMs) * windowMs).toISOString();
+  const windowStart = new Date(Math.floor(Date.now() / windowMs) * windowMs);
 
   try {
-    const supabase = createAdminClient();
+    const db = getDb();
 
-    const { data, error } = await supabase.rpc("increment_rate_limit", {
-      p_agent_id: agentId,
-      p_window_type: windowType,
-      p_window_start: windowStart,
-    });
+    const result = await db.execute(sql`
+      INSERT INTO rate_limit_windows (agent_id, window_type, window_start, request_count)
+      VALUES (${agentId}, ${windowType}, ${windowStart}, 1)
+      ON CONFLICT (agent_id, window_type, window_start)
+      DO UPDATE SET request_count = rate_limit_windows.request_count + 1
+      RETURNING request_count
+    `);
 
-    if (error) {
-      console.error("[rate-limiter] RPC error, failing closed:", error.message);
-      return { allowed: false, currentCount: 0, maxRequests, retryAfterMs: 60_000 };
-    }
-
-    const currentCount = data as number;
+    const rows = result as unknown as { request_count: number }[];
+    const currentCount = rows[0]?.request_count ?? 0;
 
     if (currentCount > maxRequests) {
       const windowStartMs = Math.floor(Date.now() / windowMs) * windowMs;

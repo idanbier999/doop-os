@@ -36,7 +36,7 @@ export function FleetPageClient({
 
   const filteredAgents =
     selectedOperatorId !== undefined
-      ? agents.filter((a) => a.owner_id === selectedOperatorId)
+      ? agents.filter((a) => a.ownerId === selectedOperatorId)
       : agents;
 
   return (

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateAgent } from "@/lib/api-auth";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { getDb } from "@/lib/db/client";
+import { tasks, taskAgents } from "@/lib/db/schema";
+import { eq, and, inArray, asc } from "drizzle-orm";
 import { withRateLimit } from "@/lib/api-rate-limit";
 
 async function handleGet(request: NextRequest) {
@@ -14,7 +16,7 @@ async function handleGet(request: NextRequest) {
   const limit = Math.min(Number(searchParams.get("limit")) || 20, 100);
   const assignedTo = searchParams.get("assigned_to");
 
-  const supabase = createAdminClient();
+  const db = getDb();
 
   // Support comma-separated status values
   const statusList = statusParam
@@ -24,12 +26,13 @@ async function handleGet(request: NextRequest) {
 
   if (assignedTo === "me") {
     // Query via task_agents junction table to include role
-    const { data: assignments, error: assignError } = await supabase
-      .from("task_agents")
-      .select("task_id, role")
-      .eq("agent_id", agent.id);
-
-    if (assignError) {
+    let assignments;
+    try {
+      assignments = await db
+        .select({ taskId: taskAgents.taskId, role: taskAgents.role })
+        .from(taskAgents)
+        .where(eq(taskAgents.agentId, agent.id));
+    } catch {
       return NextResponse.json({ error: "Failed to fetch tasks" }, { status: 500 });
     }
 
@@ -37,60 +40,65 @@ async function handleGet(request: NextRequest) {
       return NextResponse.json({ tasks: [] });
     }
 
-    const taskIds = assignments.map((a: { task_id: string }) => a.task_id);
-    const roleMap = new Map(
-      assignments.map((a: { task_id: string; role: string }) => [a.task_id, a.role])
-    );
+    const taskIds = assignments.map((a) => a.taskId);
+    const roleMap = new Map(assignments.map((a) => [a.taskId, a.role]));
 
-    let taskQuery = supabase
-      .from("tasks")
-      .select("id, title, description, status, priority, created_at")
-      .eq("workspace_id", agent.workspace_id)
-      .in("id", taskIds)
-      .order("created_at", { ascending: true })
-      .limit(limit);
+    try {
+      const statusCondition =
+        statusList.length === 1
+          ? eq(tasks.status, statusList[0])
+          : inArray(tasks.status, statusList);
 
-    if (statusList.length === 1) {
-      taskQuery = taskQuery.eq("status", statusList[0]);
-    } else {
-      taskQuery = taskQuery.in("status", statusList);
-    }
+      const result = await db
+        .select({
+          id: tasks.id,
+          title: tasks.title,
+          description: tasks.description,
+          status: tasks.status,
+          priority: tasks.priority,
+          created_at: tasks.createdAt,
+        })
+        .from(tasks)
+        .where(
+          and(eq(tasks.workspaceId, agent.workspaceId), inArray(tasks.id, taskIds), statusCondition)
+        )
+        .orderBy(asc(tasks.createdAt))
+        .limit(limit);
 
-    const { data: tasks, error: taskError } = await taskQuery;
+      const tasksWithRole = result.map((t) => ({
+        ...t,
+        role: roleMap.get(t.id) ?? null,
+      }));
 
-    if (taskError) {
+      return NextResponse.json({ tasks: tasksWithRole });
+    } catch {
       return NextResponse.json({ error: "Failed to fetch tasks" }, { status: 500 });
     }
-
-    const tasksWithRole = (tasks ?? []).map((t: { id: string }) => ({
-      ...t,
-      role: roleMap.get(t.id) ?? null,
-    }));
-
-    return NextResponse.json({ tasks: tasksWithRole });
   }
 
   // Default: query tasks table directly (backward compat)
-  let query = supabase
-    .from("tasks")
-    .select("id, title, description, status, priority, created_at")
-    .eq("workspace_id", agent.workspace_id)
-    .order("created_at", { ascending: true })
-    .limit(limit);
+  try {
+    const statusCondition =
+      statusList.length === 1 ? eq(tasks.status, statusList[0]) : inArray(tasks.status, statusList);
 
-  if (statusList.length === 1) {
-    query = query.eq("status", statusList[0]);
-  } else {
-    query = query.in("status", statusList);
-  }
+    const data = await db
+      .select({
+        id: tasks.id,
+        title: tasks.title,
+        description: tasks.description,
+        status: tasks.status,
+        priority: tasks.priority,
+        created_at: tasks.createdAt,
+      })
+      .from(tasks)
+      .where(and(eq(tasks.workspaceId, agent.workspaceId), statusCondition))
+      .orderBy(asc(tasks.createdAt))
+      .limit(limit);
 
-  const { data, error } = await query;
-
-  if (error) {
+    return NextResponse.json({ tasks: data });
+  } catch {
     return NextResponse.json({ error: "Failed to fetch tasks" }, { status: 500 });
   }
-
-  return NextResponse.json({ tasks: data });
 }
 
 export const GET = withRateLimit(handleGet);

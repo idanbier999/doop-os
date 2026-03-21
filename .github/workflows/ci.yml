@@ -58,13 +58,7 @@ jobs:
       - run: npm install --ignore-scripts
       - run: npm run build
         env:
-          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder
-          SUPABASE_SERVICE_ROLE_KEY: placeholder
-          SUPABASE_JWT_SECRET: placeholder-secret-at-least-32-chars-long
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
-          BETTER_AUTH_SECRET: placeholder-secret-at-least-32-chars-long
-          BETTER_AUTH_URL: http://localhost:3000
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/doop
 
   security:
     runs-on: ubuntu-latest

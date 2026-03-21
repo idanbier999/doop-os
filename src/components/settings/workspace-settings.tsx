@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { useSupabase } from "@/hooks/use-supabase";
 import { useWorkspace } from "@/contexts/workspace-context";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardBody } from "@/components/ui/card";
+import { updateWorkspaceSettings } from "@/app/dashboard/settings/actions";
 
 interface WorkspaceSettingsProps {
   workspace: { id: string; name: string; slug: string };
@@ -17,7 +17,6 @@ export function WorkspaceSettings({ workspace }: WorkspaceSettingsProps) {
   const [slug, setSlug] = useState(workspace.slug);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
-  const supabase = useSupabase();
 
   const canEdit = userRole === "owner" || userRole === "admin";
 
@@ -28,15 +27,15 @@ export function WorkspaceSettings({ workspace }: WorkspaceSettingsProps) {
     setSaving(true);
     setMessage("");
 
-    const { error } = await supabase
-      .from("workspaces")
-      .update({ name: name.trim(), slug: slug.trim() })
-      .eq("id", workspace.id);
+    const result = await updateWorkspaceSettings(workspace.id, {
+      name: name.trim(),
+      slug: slug.trim(),
+    });
 
     setSaving(false);
 
-    if (error) {
-      setMessage(error.message);
+    if (result.error) {
+      setMessage(result.error);
     } else {
       setMessage("Settings saved successfully.");
     }

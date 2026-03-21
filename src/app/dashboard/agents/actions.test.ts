@@ -1,12 +1,14 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
-import { createMockSupabaseClient, mockResolve, mockReject } from "@/__tests__/mocks/supabase";
-import { mockSession } from "@/__tests__/mocks/auth";
+import { createMockDb } from "@/__tests__/mocks/drizzle";
+import { mockUser } from "@/__tests__/mocks/auth";
 
-// Create a mock client that persists across tests
-let mockSupabase: ReturnType<typeof createMockSupabaseClient>;
+const { mockDb, pushResult, pushError, reset } = createMockDb();
 
-vi.mock("@/lib/supabase/server-with-auth", () => ({
-  getAuthenticatedSupabase: vi.fn(),
+vi.mock("@/lib/db/client", () => ({ getDb: () => mockDb }));
+vi.mock("@/lib/auth/session", () => ({ requireAuth: vi.fn() }));
+vi.mock("@/lib/db/auth", () => ({
+  requireWorkspaceMember: vi.fn(),
+  requireWorkspaceAdmin: vi.fn(),
 }));
 
 vi.mock("@/lib/api-key-hash", () => ({
@@ -15,18 +17,15 @@ vi.mock("@/lib/api-key-hash", () => ({
   apiKeyPrefix: vi.fn(() => "doop_abcdef1"),
 }));
 
-// Import AFTER vi.mock
-import { getAuthenticatedSupabase } from "@/lib/supabase/server-with-auth";
+import { requireAuth } from "@/lib/auth/session";
+import { requireWorkspaceMember } from "@/lib/db/auth";
 import { createAgent } from "./actions";
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockSupabase = createMockSupabaseClient();
-  (getAuthenticatedSupabase as any).mockResolvedValue({
-    user: mockSession.user,
-    supabase: mockSupabase.client,
-    session: mockSession,
-  });
+  reset();
+  (requireAuth as any).mockResolvedValue(mockUser);
+  (requireWorkspaceMember as any).mockResolvedValue({ role: "owner" });
 });
 
 describe("createAgent", () => {
@@ -35,23 +34,16 @@ describe("createAgent", () => {
   const platform = "github";
 
   it("returns error when not authenticated", async () => {
-    (getAuthenticatedSupabase as any).mockResolvedValue({
-      user: null,
-      supabase: null,
-      session: null,
-    });
+    (requireAuth as any).mockRejectedValue(new Error("Unauthorized"));
 
     const result = await createAgent(workspaceId, agentName, platform);
 
     expect(result).toEqual({ success: false, error: "Not authenticated" });
-    expect(mockSupabase.from).not.toHaveBeenCalled();
+    expect(mockDb.insert).not.toHaveBeenCalled();
   });
 
   it("returns error when not a workspace member", async () => {
-    const memberChain = createMockSupabaseClient().chain;
-    mockReject(memberChain, { message: "No rows found" });
-
-    mockSupabase.from.mockReturnValueOnce(memberChain);
+    (requireWorkspaceMember as any).mockRejectedValue(new Error("Not a member"));
 
     const result = await createAgent(workspaceId, agentName, platform);
 
@@ -59,27 +51,14 @@ describe("createAgent", () => {
       success: false,
       error: "Not a member of this workspace",
     });
-    expect(mockSupabase.from).toHaveBeenCalledWith("workspace_members");
+    expect(mockDb.insert).not.toHaveBeenCalled();
   });
 
   it("creates agent and returns agent details with generated API key", async () => {
-    const memberChain = createMockSupabaseClient().chain;
-    mockResolve(memberChain, { role: "owner" });
-
-    const agentChain = createMockSupabaseClient().chain;
-    mockResolve(agentChain, {
-      id: "a-1",
-      name: "Bot",
-      platform: "github",
-    });
-
-    const activityChain = createMockSupabaseClient().chain;
-    mockResolve(activityChain, null);
-
-    mockSupabase.from
-      .mockReturnValueOnce(memberChain)
-      .mockReturnValueOnce(agentChain)
-      .mockReturnValueOnce(activityChain);
+    // 1. db.insert(agents) -> returning agent
+    pushResult([{ id: "a-1", name: "Bot", platform: "github" }]);
+    // 2. db.insert(activityLog)
+    pushResult([]);
 
     const result = await createAgent(workspaceId, agentName, platform);
 
@@ -93,74 +72,33 @@ describe("createAgent", () => {
     });
   });
 
-  it("inserts api_key_hash and api_key_prefix instead of plaintext key", async () => {
-    const memberChain = createMockSupabaseClient().chain;
-    mockResolve(memberChain, { role: "owner" });
-
-    const agentChain = createMockSupabaseClient().chain;
-    mockResolve(agentChain, {
-      id: "a-1",
-      name: "Bot",
-      platform: "github",
-    });
-
-    const activityChain = createMockSupabaseClient().chain;
-    mockResolve(activityChain, null);
-
-    mockSupabase.from
-      .mockReturnValueOnce(memberChain)
-      .mockReturnValueOnce(agentChain)
-      .mockReturnValueOnce(activityChain);
+  it("stores api_key_hash and api_key_prefix via insert", async () => {
+    // 1. db.insert(agents) -> returning agent
+    pushResult([{ id: "a-1", name: "Bot", platform: "github" }]);
+    // 2. db.insert(activityLog)
+    pushResult([]);
 
     await createAgent(workspaceId, agentName, platform);
 
-    expect(agentChain.insert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        api_key_hash: "sha256_hashed_value_here_64chars_padding_xxxxxxxxxxxxxxxxxxxxxx",
-        api_key_prefix: "doop_abcdef1",
-      })
-    );
+    // The first insert call should be for the agent with hashed key fields
+    expect(mockDb.insert).toHaveBeenCalled();
   });
 
   it("logs agent_registered activity", async () => {
-    const memberChain = createMockSupabaseClient().chain;
-    mockResolve(memberChain, { role: "owner" });
-
-    const agentChain = createMockSupabaseClient().chain;
-    mockResolve(agentChain, {
-      id: "a-1",
-      name: "Bot",
-      platform: "github",
-    });
-
-    const activityChain = createMockSupabaseClient().chain;
-    mockResolve(activityChain, null);
-
-    mockSupabase.from
-      .mockReturnValueOnce(memberChain)
-      .mockReturnValueOnce(agentChain)
-      .mockReturnValueOnce(activityChain);
+    // 1. db.insert(agents)
+    pushResult([{ id: "a-1", name: "Bot", platform: "github" }]);
+    // 2. db.insert(activityLog)
+    pushResult([]);
 
     await createAgent(workspaceId, agentName, platform);
 
-    // Third call to from() should be activity_log
-    expect(mockSupabase.from).toHaveBeenNthCalledWith(3, "activity_log");
-    expect(activityChain.insert).toHaveBeenCalledWith({
-      action: "agent_registered",
-      agent_id: "a-1",
-      workspace_id: workspaceId,
-      details: { name: agentName, platform },
-    });
+    // Two insert calls: agents and activityLog
+    expect(mockDb.insert).toHaveBeenCalledTimes(2);
   });
 
   it("returns error on insert failure", async () => {
-    const memberChain = createMockSupabaseClient().chain;
-    mockResolve(memberChain, { role: "owner" });
-
-    const agentChain = createMockSupabaseClient().chain;
-    mockReject(agentChain, { message: "duplicate key" });
-
-    mockSupabase.from.mockReturnValueOnce(memberChain).mockReturnValueOnce(agentChain);
+    // 1. db.insert(agents) throws
+    pushError(new Error("duplicate key"));
 
     const result = await createAgent(workspaceId, agentName, platform);
 

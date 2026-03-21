@@ -1,13 +1,12 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { useRealtime } from "@/hooks/use-realtime";
+import { useRealtimeEvents } from "@/hooks/use-realtime-events";
 import { useWorkspace } from "@/contexts/workspace-context";
 
 import { relativeTime } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/empty-state";
 import type { Json } from "@/lib/database.types";
-import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 
 type ActivityEntry = {
   id: string;
@@ -65,10 +64,10 @@ export function ActivityFeed({ initialActivity, agents }: ActivityFeedProps) {
   const [activity, setActivity] = useState<ActivityEntry[]>(initialActivity);
   const { workspaceId } = useWorkspace();
 
-  const handlePayload = useCallback(
-    (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
-      if (payload.eventType === "INSERT") {
-        const newEntry = payload.new as ActivityEntry;
+  const handleEvent = useCallback(
+    (event: { event: string; new?: Record<string, unknown> }) => {
+      if (event.event === "INSERT") {
+        const newEntry = event.new as ActivityEntry;
         if (newEntry.workspace_id === workspaceId) {
           const agentName = agents.find((a) => a.id === newEntry.agent_id)?.name ?? null;
           setActivity((prev) =>
@@ -80,9 +79,9 @@ export function ActivityFeed({ initialActivity, agents }: ActivityFeedProps) {
     [workspaceId, agents]
   );
 
-  useRealtime({
+  useRealtimeEvents({
     table: "activity_log",
-    onPayload: handlePayload,
+    onEvent: handleEvent,
   });
 
   return (

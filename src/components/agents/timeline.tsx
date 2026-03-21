@@ -1,13 +1,12 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { useRealtime } from "@/hooks/use-realtime";
+import { useRealtimeEvents } from "@/hooks/use-realtime-events";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardBody } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { relativeTime } from "@/lib/utils";
 import type { Tables } from "@/lib/database.types";
-import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 
 interface TimelineProps {
   agentId: string;
@@ -17,11 +16,11 @@ interface TimelineProps {
 export function Timeline({ agentId, initialUpdates }: TimelineProps) {
   const [updates, setUpdates] = useState<Tables<"agent_updates">[]>(initialUpdates);
 
-  const handlePayload = useCallback(
-    (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
-      if (payload.eventType === "INSERT") {
-        const newUpdate = payload.new as Tables<"agent_updates">;
-        if (newUpdate.agent_id === agentId) {
+  const handleEvent = useCallback(
+    (event: { event: string; new?: Record<string, unknown> }) => {
+      if (event.event === "INSERT") {
+        const newUpdate = event.new as Tables<"agent_updates">;
+        if (newUpdate.agentId === agentId) {
           setUpdates((prev) => [newUpdate, ...prev]);
         }
       }
@@ -29,10 +28,9 @@ export function Timeline({ agentId, initialUpdates }: TimelineProps) {
     [agentId]
   );
 
-  useRealtime({
+  useRealtimeEvents({
     table: "agent_updates",
-    filter: `agent_id=eq.${agentId}`,
-    onPayload: handlePayload,
+    onEvent: handleEvent,
   });
 
   return (
@@ -54,7 +52,7 @@ export function Timeline({ agentId, initialUpdates }: TimelineProps) {
                   {update.stage && <Badge variant="stage" value={update.stage} />}
                   {update.health && <Badge variant="health" value={update.health} />}
                   <span className="ml-auto text-xs text-mac-dark-gray">
-                    {relativeTime(update.created_at)}
+                    {relativeTime(update.createdAt)}
                   </span>
                 </div>
                 {update.message && (

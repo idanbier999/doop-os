@@ -3,13 +3,13 @@
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { createWorkspace } from "@/app/onboarding/actions";
 
 interface CreateWorkspaceStepProps {
   onComplete: (workspaceId: string) => void;
-  supabase: ReturnType<typeof import("@/lib/supabase/client").createClient>;
 }
 
-export function CreateWorkspaceStep({ onComplete, supabase }: CreateWorkspaceStepProps) {
+export function CreateWorkspaceStep({ onComplete }: CreateWorkspaceStepProps) {
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -35,19 +35,16 @@ export function CreateWorkspaceStep({ onComplete, supabase }: CreateWorkspaceSte
     setSubmitting(true);
     setError("");
 
-    const { data, error: rpcError } = await supabase.rpc("create_workspace_for_user", {
-      workspace_name: name.trim(),
-      workspace_slug: slug.trim(),
-    });
+    const result = await createWorkspace(name.trim(), slug.trim());
 
     setSubmitting(false);
 
-    if (rpcError) {
-      setError(rpcError.message);
+    if (!result.success) {
+      setError(result.error ?? "Failed to create workspace");
       return;
     }
 
-    onComplete(data as string);
+    onComplete(result.workspaceId!);
   }
 
   return (

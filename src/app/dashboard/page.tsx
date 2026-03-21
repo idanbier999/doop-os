@@ -1,6 +1,15 @@
 import type { Metadata } from "next";
-import { getAuthenticatedSupabase } from "@/lib/supabase/server-with-auth";
-import { redirect } from "next/navigation";
+import { requireWorkspaceMembership } from "@/lib/workspace";
+import { getDb } from "@/lib/db/client";
+import {
+  agents as agentsTable,
+  tasks as tasksTable,
+  activityLog,
+  problems as problemsTable,
+  agentUpdates,
+} from "@/lib/db/schema";
+import { eq, and, inArray, gte, lte, desc, sql } from "drizzle-orm";
+import type { Json } from "@/lib/database.types";
 
 export const metadata: Metadata = { title: "Fleet | Doop" };
 import { FleetStatsBar } from "@/components/fleet/fleet-stats-bar";
@@ -32,119 +41,163 @@ function isProblemTrendEmpty(
 }
 
 export default async function DashboardOverviewPage() {
-  const { user, supabase } = await getAuthenticatedSupabase();
-  if (!user || !supabase) redirect("/login");
+  const { workspace } = await requireWorkspaceMembership();
+  const workspaceId = workspace.id;
 
-  const { data: membership } = await supabase
-    .from("workspace_members")
-    .select("workspace_id")
-    .eq("user_id", user.id)
-    .limit(1)
-    .single();
-
-  if (!membership) redirect("/onboarding");
-
-  const workspaceId = membership.workspace_id;
+  const db = getDb();
 
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-  const sevenDaysAgoISO = sevenDaysAgo.toISOString();
 
   const yesterdayEOD = new Date();
   yesterdayEOD.setDate(yesterdayEOD.getDate() - 1);
   yesterdayEOD.setHours(23, 59, 59, 999);
-  const yesterdayEODISO = yesterdayEOD.toISOString();
 
-  // First fetch workspace agent IDs for scoping problems
-  const { data: wsAgents } = await supabase
-    .from("agents")
-    .select(
-      "id, name, health, stage, agent_type, last_seen_at, workspace_id, tags, description, metadata, platform, created_at, updated_at, capabilities, webhook_url, webhook_secret, owner_id, api_key_prefix"
-    )
-    .eq("workspace_id", workspaceId);
+  // Fetch workspace agents
+  const agents = await db
+    .select()
+    .from(agentsTable)
+    .where(eq(agentsTable.workspaceId, workspaceId));
 
-  const agents = wsAgents ?? [];
   const hasAgents = agents.length > 0;
   const agentIds = agents.map((a) => a.id);
 
   const [
-    tasksResult,
-    activityResult,
-    openProblemsResult,
-    recentProblemsResult,
-    recentTasksResult,
-    activeAgentTasksResult,
-    agentHealthHistoryResult,
-    yesterdayProblemsResult,
+    allTasks,
+    activityRows,
+    openProblemsRaw,
+    recentProblems,
+    recentTasks,
+    activeAgentTasks,
+    agentHealthHistoryRaw,
+    yesterdayOpenProblemsResult,
     yesterdayTasksResult,
   ] = await Promise.all([
-    supabase.from("tasks").select("id, status").eq("workspace_id", workspaceId),
-    supabase
-      .from("activity_log")
-      .select("*, agents(name)")
-      .eq("workspace_id", workspaceId)
-      .order("created_at", { ascending: false })
+    // All tasks for status counts
+    db
+      .select({ id: tasksTable.id, status: tasksTable.status })
+      .from(tasksTable)
+      .where(eq(tasksTable.workspaceId, workspaceId)),
+
+    // Recent activity with agent names
+    db
+      .select({
+        id: activityLog.id,
+        action: activityLog.action,
+        details: activityLog.details,
+        createdAt: activityLog.createdAt,
+        agentId: activityLog.agentId,
+        userId: activityLog.userId,
+        workspaceId: activityLog.workspaceId,
+        agentName: agentsTable.name,
+      })
+      .from(activityLog)
+      .leftJoin(agentsTable, eq(activityLog.agentId, agentsTable.id))
+      .where(eq(activityLog.workspaceId, workspaceId))
+      .orderBy(desc(activityLog.createdAt))
       .limit(20),
+
     // All open problems (not limited to 7 days) for stats bar
     agentIds.length > 0
-      ? supabase.from("problems").select("severity").eq("status", "open").in("agent_id", agentIds)
-      : Promise.resolve({ data: [] }),
+      ? db
+          .select({ severity: problemsTable.severity })
+          .from(problemsTable)
+          .where(and(eq(problemsTable.status, "open"), inArray(problemsTable.agentId, agentIds)))
+      : Promise.resolve([]),
+
     // Recent problems (7 days) for trend chart
     agentIds.length > 0
-      ? supabase
-          .from("problems")
-          .select("created_at, severity")
-          .in("agent_id", agentIds)
-          .gte("created_at", sevenDaysAgoISO)
-      : Promise.resolve({ data: [] }),
-    supabase
-      .from("tasks")
-      .select("created_at, updated_at, status")
-      .eq("workspace_id", workspaceId)
-      .gte("created_at", sevenDaysAgoISO),
-    // Active agent tasks — for "Working on" in agent grid
+      ? db
+          .select({
+            createdAt: problemsTable.createdAt,
+            severity: problemsTable.severity,
+          })
+          .from(problemsTable)
+          .where(
+            and(
+              inArray(problemsTable.agentId, agentIds),
+              gte(problemsTable.createdAt, sevenDaysAgo)
+            )
+          )
+      : Promise.resolve([]),
+
+    // Recent tasks (7 days) for throughput chart
+    db
+      .select({
+        createdAt: tasksTable.createdAt,
+        updatedAt: tasksTable.updatedAt,
+        status: tasksTable.status,
+      })
+      .from(tasksTable)
+      .where(and(eq(tasksTable.workspaceId, workspaceId), gte(tasksTable.createdAt, sevenDaysAgo))),
+
+    // Active agent tasks -- for "Working on" in agent grid
     agentIds.length > 0
-      ? supabase
-          .from("tasks")
-          .select("agent_id, title")
-          .in("agent_id", agentIds)
-          .in("status", ["in_progress", "waiting_on_agent"])
-      : Promise.resolve({ data: [] }),
-    // Agent health history (7 days) — for sparklines in agent grid
+      ? db
+          .select({ agentId: tasksTable.agentId, title: tasksTable.title })
+          .from(tasksTable)
+          .where(
+            and(
+              inArray(tasksTable.agentId, agentIds),
+              inArray(tasksTable.status, ["in_progress", "waiting_on_agent"])
+            )
+          )
+      : Promise.resolve([]),
+
+    // Agent health history (7 days) -- for sparklines in agent grid
     agentIds.length > 0
-      ? supabase
-          .from("agent_updates")
-          .select("agent_id, health, created_at")
-          .in("agent_id", agentIds)
-          .gte("created_at", sevenDaysAgoISO)
-      : Promise.resolve({ data: [] }),
+      ? db
+          .select({
+            agentId: agentUpdates.agentId,
+            health: agentUpdates.health,
+            createdAt: agentUpdates.createdAt,
+          })
+          .from(agentUpdates)
+          .where(
+            and(inArray(agentUpdates.agentId, agentIds), gte(agentUpdates.createdAt, sevenDaysAgo))
+          )
+      : Promise.resolve([]),
+
     // Yesterday snapshot: open problems as of yesterday EOD
     agentIds.length > 0
-      ? supabase
-          .from("problems")
-          .select("id", { count: "exact", head: true })
-          .eq("status", "open")
-          .in("agent_id", agentIds)
-          .lte("created_at", yesterdayEODISO)
-      : Promise.resolve({ count: 0 }),
+      ? db
+          .select({ count: sql<number>`count(*)` })
+          .from(problemsTable)
+          .where(
+            and(
+              eq(problemsTable.status, "open"),
+              inArray(problemsTable.agentId, agentIds),
+              lte(problemsTable.createdAt, yesterdayEOD)
+            )
+          )
+      : Promise.resolve([{ count: 0 }]),
+
     // Yesterday snapshot: tasks in-flight as of yesterday EOD
-    supabase
-      .from("tasks")
-      .select("id", { count: "exact", head: true })
-      .eq("workspace_id", workspaceId)
-      .in("status", ["in_progress", "waiting_on_agent", "waiting_on_human"])
-      .lte("created_at", yesterdayEODISO),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(tasksTable)
+      .where(
+        and(
+          eq(tasksTable.workspaceId, workspaceId),
+          inArray(tasksTable.status, ["in_progress", "waiting_on_agent", "waiting_on_human"]),
+          lte(tasksTable.createdAt, yesterdayEOD)
+        )
+      ),
   ]);
 
-  const tasks = tasksResult.data ?? [];
-  const activity = activityResult.data ?? [];
-  const openProblemsRaw = openProblemsResult.data ?? [];
-  const recentProblems = recentProblemsResult.data ?? [];
-  const recentTasks = recentTasksResult.data ?? [];
-  const activeAgentTasks = activeAgentTasksResult.data ?? [];
-  const agentHealthHistoryRaw = agentHealthHistoryResult.data ?? [];
-  const yesterdayOpenProblems = (yesterdayProblemsResult as { count: number | null }).count ?? 0;
-  const yesterdayTasksInFlight = (yesterdayTasksResult as { count: number | null }).count ?? 0;
+  // Transform activity rows to match the expected shape (ActivityFeed uses its own snake_case type)
+  const activity = activityRows.map((row) => ({
+    id: row.id,
+    action: row.action,
+    details: (row.details ?? null) as Json | null,
+    created_at: row.createdAt?.toISOString() ?? null,
+    agent_id: row.agentId,
+    user_id: row.userId,
+    workspace_id: row.workspaceId,
+    agents: row.agentName ? { name: row.agentName } : null,
+  }));
+  const yesterdayOpenProblems = Number(yesterdayOpenProblemsResult[0]?.count ?? 0);
+  const yesterdayTasksInFlight = Number(yesterdayTasksResult[0]?.count ?? 0);
 
   // Agent health counts
   const agentCounts = { total: agents.length, healthy: 0, degraded: 0, critical: 0, offline: 0 };
@@ -162,7 +215,7 @@ export default async function DashboardOverviewPage() {
   };
 
   // Tasks in flight
-  const tasksInFlight = tasks.filter(
+  const tasksInFlight = allTasks.filter(
     (t) =>
       t.status === "in_progress" ||
       t.status === "waiting_on_agent" ||
@@ -173,7 +226,7 @@ export default async function DashboardOverviewPage() {
   const { keys: dateKeys, map: dateLabels } = buildDateBuckets(7);
   const problemTrend = dateKeys.map((iso) => {
     const dayProblems = recentProblems.filter(
-      (p) => p.created_at && p.created_at.slice(0, 10) === iso
+      (p) => p.createdAt && p.createdAt.toISOString().slice(0, 10) === iso
     );
     return {
       date: dateLabels[iso],
@@ -187,27 +240,31 @@ export default async function DashboardOverviewPage() {
   // Task throughput (7 days)
   const taskThroughput = dateKeys.map((iso) => {
     const created = recentTasks.filter(
-      (t) => t.created_at && t.created_at.slice(0, 10) === iso
+      (t) => t.createdAt && t.createdAt.toISOString().slice(0, 10) === iso
     ).length;
     const completed = recentTasks.filter(
-      (t) => t.status === "completed" && t.updated_at && t.updated_at.slice(0, 10) === iso
+      (t) =>
+        t.status === "completed" && t.updatedAt && t.updatedAt.toISOString().slice(0, 10) === iso
     ).length;
     return { date: dateLabels[iso], created, completed };
   });
 
-  // Sparkline arrays for stats bar (7 entries each — daily new problem / task count)
+  // Sparkline arrays for stats bar (7 entries each -- daily new problem / task count)
   const problemsSparkline = dateKeys.map((iso) => ({
-    value: recentProblems.filter((p) => p.created_at && p.created_at.slice(0, 10) === iso).length,
+    value: recentProblems.filter(
+      (p) => p.createdAt && p.createdAt.toISOString().slice(0, 10) === iso
+    ).length,
   }));
 
   const tasksSparkline = dateKeys.map((iso) => ({
-    value: recentTasks.filter((t) => t.created_at && t.created_at.slice(0, 10) === iso).length,
+    value: recentTasks.filter((t) => t.createdAt && t.createdAt.toISOString().slice(0, 10) === iso)
+      .length,
   }));
 
   // Agent current task map
   const agentCurrentTask: Record<string, string> = {};
   for (const t of activeAgentTasks) {
-    if (t.agent_id) agentCurrentTask[t.agent_id] = t.title;
+    if (t.agentId) agentCurrentTask[t.agentId] = t.title;
   }
 
   // Agent health history map
@@ -216,11 +273,11 @@ export default async function DashboardOverviewPage() {
     Array<{ health: string | null; created_at: string | null }>
   > = {};
   for (const u of agentHealthHistoryRaw) {
-    const aid = (u as { agent_id: string }).agent_id;
+    const aid = u.agentId;
     if (!agentHealthHistory[aid]) agentHealthHistory[aid] = [];
     agentHealthHistory[aid].push({
-      health: (u as { health: string | null }).health,
-      created_at: (u as { created_at: string | null }).created_at,
+      health: u.health,
+      created_at: u.createdAt?.toISOString() ?? null,
     });
   }
 

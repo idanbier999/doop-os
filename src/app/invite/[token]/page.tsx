@@ -1,6 +1,8 @@
 import { getInviteDetails } from "@/app/dashboard/settings/team-actions";
-import { getAuthenticatedSupabase } from "@/lib/supabase/server-with-auth";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { getSession } from "@/lib/auth/session";
+import { getDb } from "@/lib/db/client";
+import { workspaceMembers } from "@/lib/db/schema";
+import { eq, and } from "drizzle-orm";
 import { AcceptInviteClient } from "@/components/invite/accept-invite-client";
 
 export const metadata = { title: "Accept Invite | Doop" };
@@ -23,7 +25,7 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
   }
 
   // Check auth status
-  const { user } = await getAuthenticatedSupabase();
+  const user = await getSession();
   if (!user) {
     return (
       <AcceptInviteClient
@@ -36,14 +38,18 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
     );
   }
 
-  // Check if already a member (use admin client to bypass RLS)
-  const adminClient = createAdminClient();
-  const { data: existingMember } = await adminClient
-    .from("workspace_members")
-    .select("id")
-    .eq("workspace_id", result.invitation.workspaceId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+  // Check if already a member
+  const db = getDb();
+  const [existingMember] = await db
+    .select({ id: workspaceMembers.id })
+    .from(workspaceMembers)
+    .where(
+      and(
+        eq(workspaceMembers.workspaceId, result.invitation.workspaceId),
+        eq(workspaceMembers.userId, user.id)
+      )
+    )
+    .limit(1);
 
   return (
     <AcceptInviteClient

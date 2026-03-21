@@ -1,13 +1,11 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import { useSupabase } from "@/hooks/use-supabase";
 import { useWorkspace } from "@/contexts/workspace-context";
-import { useRealtime } from "@/hooks/use-realtime";
+import { useRealtimeEvents } from "@/hooks/use-realtime-events";
 import { CommentForm } from "./comment-form";
 import { relativeTime } from "@/lib/utils";
 import type { Tables } from "@/lib/database.types";
-import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 
 type Comment = Tables<"task_comments"> & { agents?: { name: string } | null };
 
@@ -16,7 +14,6 @@ interface TaskCommentsProps {
 }
 
 export function TaskComments({ taskId }: TaskCommentsProps) {
-  const supabase = useSupabase();
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
   const { userId } = useWorkspace();
@@ -26,21 +23,23 @@ export function TaskComments({ taskId }: TaskCommentsProps) {
     let cancelled = false;
     async function fetchComments() {
       setLoading(true);
-      const { data } = await supabase
-        .from("task_comments")
-        .select("*, agents(name)")
-        .eq("task_id", taskId)
-        .order("created_at", { ascending: true });
-      if (!cancelled) {
-        setComments((data as Comment[]) ?? []);
-        setLoading(false);
+      try {
+        const res = await fetch(`/api/v1/tasks/${taskId}/comments`);
+        if (res.ok) {
+          const data = await res.json();
+          if (!cancelled) {
+            setComments(data ?? []);
+          }
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     }
     fetchComments();
     return () => {
       cancelled = true;
     };
-  }, [taskId, supabase]);
+  }, [taskId]);
 
   // Scroll to bottom when comments change
   useEffect(() => {
@@ -49,28 +48,27 @@ export function TaskComments({ taskId }: TaskCommentsProps) {
     }
   }, [comments.length]);
 
-  const handlePayload = useCallback(
-    (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
-      if (payload.eventType === "INSERT") {
-        const newComment = payload.new as unknown as Comment;
-        if (newComment.task_id === taskId) {
+  const handleEvent = useCallback(
+    (event: { event: string; new?: Record<string, unknown>; old?: Record<string, unknown> }) => {
+      if (event.event === "INSERT") {
+        const newComment = event.new as unknown as Comment;
+        if (newComment.taskId === taskId) {
           setComments((prev) => [...prev, newComment]);
         }
-      } else if (payload.eventType === "UPDATE") {
-        const updated = payload.new as unknown as Comment;
+      } else if (event.event === "UPDATE") {
+        const updated = event.new as unknown as Comment;
         setComments((prev) => prev.map((c) => (c.id === updated.id ? { ...c, ...updated } : c)));
-      } else if (payload.eventType === "DELETE") {
-        const deleted = payload.old as unknown as { id: string };
+      } else if (event.event === "DELETE") {
+        const deleted = event.old as unknown as { id: string };
         setComments((prev) => prev.filter((c) => c.id !== deleted.id));
       }
     },
     [taskId]
   );
 
-  useRealtime({
+  useRealtimeEvents({
     table: "task_comments",
-    filter: `task_id=eq.${taskId}`,
-    onPayload: handlePayload,
+    onEvent: handleEvent,
   });
 
   return (
@@ -84,8 +82,8 @@ export function TaskComments({ taskId }: TaskCommentsProps) {
           <p className="text-sm text-mac-gray text-center py-4">No comments yet</p>
         )}
         {comments.map((comment) => {
-          const isAgent = !!comment.agent_id;
-          const isCurrentUser = comment.user_id === userId;
+          const isAgent = !!comment.agentId;
+          const isCurrentUser = comment.userId === userId;
           return (
             <div
               key={comment.id}
@@ -98,7 +96,7 @@ export function TaskComments({ taskId }: TaskCommentsProps) {
                 <span className="font-bold">
                   {isAgent ? (comment.agents?.name ?? "Agent") : isCurrentUser ? "You" : "User"}
                 </span>
-                <span className="text-mac-gray ml-auto">{relativeTime(comment.created_at)}</span>
+                <span className="text-mac-gray ml-auto">{relativeTime(comment.createdAt)}</span>
               </div>
               <p className="text-sm text-mac-black mt-0.5 whitespace-pre-wrap">{comment.content}</p>
             </div>

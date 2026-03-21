@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getAuthenticatedSupabase } from "@/lib/supabase/server-with-auth";
 import { getAgentStats } from "@/lib/agent-stats";
+import * as agentsRepo from "@/lib/db/repos/agents";
+import { getDb } from "@/lib/db/client";
+import { agentUpdates, problems, tasks } from "@/lib/db/schema";
+import { eq, desc } from "drizzle-orm";
+import type { Json } from "@/lib/database.types";
 import { StatusHeader } from "@/components/agents/status-header";
 import { HealthSparkline } from "@/components/agents/health-sparkline";
 import { PerformanceCards } from "@/components/agents/performance-cards";
@@ -16,8 +20,7 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const { supabase } = await getAuthenticatedSupabase();
-  const { data: agent } = await supabase!.from("agents").select("name").eq("id", id).single();
+  const agent = await agentsRepo.findById(id);
 
   return {
     title: agent ? `${agent.name} | Doop` : "Agent Detail | Doop",
@@ -30,54 +33,36 @@ interface AgentDetailPageProps {
 
 export default async function AgentDetailPage({ params }: AgentDetailPageProps) {
   const { id } = await params;
-  const { supabase: sb } = await getAuthenticatedSupabase();
-  const supabase = sb!;
 
-  const { data: agent } = await supabase
-    .from("agents")
-    .select(
-      "id, name, health, stage, agent_type, last_seen_at, workspace_id, tags, description, metadata, platform, created_at, updated_at, capabilities, webhook_url, webhook_secret, owner_id, api_key_prefix"
-    )
-    .eq("id", id)
-    .single();
-
+  const agent = await agentsRepo.findById(id);
   if (!agent) {
     notFound();
   }
 
-  // eslint-disable-next-line react-hooks/purity -- server component runs per-request, Date.now() is intentional
-  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const db = getDb();
 
-  const [updatesResult, problemsResult, tasksResult, stats] = await Promise.all([
-    supabase
-      .from("agent_updates")
-      .select("id, agent_id, health, stage, message, details, created_at")
-      .eq("agent_id", id)
-      .order("created_at", { ascending: false })
+  // eslint-disable-next-line react-hooks/purity -- server component runs per-request, Date.now() is intentional
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+  const [updatesRows, problemsRows, tasksRows, stats] = await Promise.all([
+    db
+      .select()
+      .from(agentUpdates)
+      .where(eq(agentUpdates.agentId, id))
+      .orderBy(desc(agentUpdates.createdAt))
       .limit(50),
-    supabase
-      .from("problems")
-      .select(
-        "id, agent_id, title, description, severity, status, task_id, created_at, resolved_at, resolved_by"
-      )
-      .eq("agent_id", id)
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("tasks")
-      .select(
-        "id, title, description, status, priority, agent_id, assigned_to, result, workspace_id, created_by, created_at, updated_at, project_id"
-      )
-      .eq("agent_id", id)
-      .order("created_at", { ascending: false }),
-    getAgentStats(supabase, id),
+    db.select().from(problems).where(eq(problems.agentId, id)).orderBy(desc(problems.createdAt)),
+    db.select().from(tasks).where(eq(tasks.agentId, id)).orderBy(desc(tasks.createdAt)),
+    getAgentStats(id),
   ]);
 
-  const updates = updatesResult.data ?? [];
-  const problems = problemsResult.data ?? [];
-  const tasks = tasksResult.data ?? [];
-
-  // Filter updates from last 7 days for sparkline
-  const recentUpdates = updates.filter((u) => u.created_at && u.created_at >= sevenDaysAgo);
+  // Filter updates from last 7 days for sparkline (HealthSparkline expects snake_case shape)
+  const recentUpdates = updatesRows
+    .filter((u) => u.createdAt && u.createdAt >= sevenDaysAgo)
+    .map((u) => ({
+      health: u.health,
+      created_at: u.createdAt?.toISOString() ?? null,
+    }));
 
   return (
     <div className="space-y-6">
@@ -94,12 +79,12 @@ export default async function AgentDetailPage({ params }: AgentDetailPageProps) 
 
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="space-y-6">
-          <Timeline agentId={id} initialUpdates={updates} />
-          <MetadataViewer metadata={agent.metadata} />
+          <Timeline agentId={id} initialUpdates={updatesRows} />
+          <MetadataViewer metadata={agent.metadata as Json} />
         </div>
         <div className="space-y-6">
-          <AgentProblemsPanel agentId={id} initialProblems={problems} />
-          <AgentTasksPanel agentId={id} initialTasks={tasks} />
+          <AgentProblemsPanel agentId={id} initialProblems={problemsRows} />
+          <AgentTasksPanel agentId={id} initialTasks={tasksRows} />
         </div>
       </div>
     </div>

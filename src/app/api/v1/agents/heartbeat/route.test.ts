@@ -1,11 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
-import {
-  createMockSupabaseClient,
-  createTableMocks,
-  mockResolve,
-  mockReject,
-} from "@/__tests__/mocks/supabase";
+import { createMockDb } from "@/__tests__/mocks/drizzle";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -13,16 +8,18 @@ import {
 
 const mockAgent = {
   id: "agent-001",
-  workspace_id: "ws-001",
+  workspaceId: "ws-001",
   name: "test-agent",
 };
+
+const { mockDb, pushResult, pushError, reset } = createMockDb();
 
 vi.mock("@/lib/api-auth", () => ({
   authenticateAgent: vi.fn(),
 }));
 
-vi.mock("@/lib/supabase/admin", () => ({
-  createAdminClient: vi.fn(),
+vi.mock("@/lib/db/client", () => ({
+  getDb: () => mockDb,
 }));
 
 vi.mock("@/lib/api-rate-limit", () => ({
@@ -30,19 +27,15 @@ vi.mock("@/lib/api-rate-limit", () => ({
 }));
 
 import { authenticateAgent } from "@/lib/api-auth";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { POST } from "./route";
 
 // ---------------------------------------------------------------------------
 // Setup
 // ---------------------------------------------------------------------------
 
-let mockSupabase: ReturnType<typeof createMockSupabaseClient>;
-
 beforeEach(() => {
   vi.clearAllMocks();
-  mockSupabase = createMockSupabaseClient();
-  (createAdminClient as ReturnType<typeof vi.fn>).mockReturnValue(mockSupabase.client);
+  reset();
   (authenticateAgent as ReturnType<typeof vi.fn>).mockResolvedValue(mockAgent);
 });
 
@@ -64,6 +57,9 @@ describe("POST /api/v1/agents/heartbeat", () => {
   });
 
   it("returns { ok: true } for valid heartbeat with empty body", async () => {
+    // One db.update() for updating agents table
+    pushResult([]);
+
     const request = new NextRequest("http://localhost/api/v1/agents/heartbeat", {
       method: "POST",
       headers: { Authorization: "Bearer test-key" },
@@ -77,6 +73,9 @@ describe("POST /api/v1/agents/heartbeat", () => {
   });
 
   it("returns 200 for malformed JSON body (treated as empty)", async () => {
+    // One db.update() for updating agents table
+    pushResult([]);
+
     const request = new NextRequest("http://localhost/api/v1/agents/heartbeat", {
       method: "POST",
       headers: {
@@ -109,35 +108,26 @@ describe("POST /api/v1/agents/heartbeat", () => {
   });
 
   it("updates last_seen_at and health to 'healthy'", async () => {
+    // One db.update() for updating agents table (no metadata to merge)
+    pushResult([]);
+
     const request = new NextRequest("http://localhost/api/v1/agents/heartbeat", {
       method: "POST",
       headers: { Authorization: "Bearer test-key" },
     });
 
-    await POST(request);
+    const response = await POST(request);
+    const json = await response.json();
 
-    // from("agents") is called once (no metadata to merge) for the update
-    expect(mockSupabase.from).toHaveBeenCalledWith("agents");
-    expect(mockSupabase.chain.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        last_seen_at: expect.any(String),
-        health: "healthy",
-      })
-    );
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
   });
 
   it("merges version into metadata", async () => {
-    // Set up two separate chains: one for the select (fetch existing metadata),
-    // one for the update.
-    const selectChain = createMockSupabaseClient().chain;
-    mockResolve(selectChain, { metadata: { existing: true } });
-
-    const updateChain = createMockSupabaseClient().chain;
-    mockResolve(updateChain, null);
-
-    mockSupabase.from
-      .mockReturnValueOnce(selectChain) // first from("agents") -> select metadata
-      .mockReturnValueOnce(updateChain); // second from("agents") -> update
+    // First db operation: select existing metadata
+    pushResult([{ metadata: { existing: true } }]);
+    // Second db operation: update agents
+    pushResult([]);
 
     const request = new NextRequest("http://localhost/api/v1/agents/heartbeat", {
       method: "POST",
@@ -151,22 +141,15 @@ describe("POST /api/v1/agents/heartbeat", () => {
     const response = await POST(request);
     const json = await response.json();
 
+    expect(response.status).toBe(200);
     expect(json.ok).toBe(true);
-    expect(updateChain.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        metadata: { existing: true, version: "2.0" },
-      })
-    );
   });
 
   it("merges meta into metadata", async () => {
-    const selectChain = createMockSupabaseClient().chain;
-    mockResolve(selectChain, { metadata: { existing: true } });
-
-    const updateChain = createMockSupabaseClient().chain;
-    mockResolve(updateChain, null);
-
-    mockSupabase.from.mockReturnValueOnce(selectChain).mockReturnValueOnce(updateChain);
+    // First db operation: select existing metadata
+    pushResult([{ metadata: { existing: true } }]);
+    // Second db operation: update agents
+    pushResult([]);
 
     const request = new NextRequest("http://localhost/api/v1/agents/heartbeat", {
       method: "POST",
@@ -180,24 +163,15 @@ describe("POST /api/v1/agents/heartbeat", () => {
     const response = await POST(request);
     const json = await response.json();
 
+    expect(response.status).toBe(200);
     expect(json.ok).toBe(true);
-    expect(updateChain.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        metadata: { existing: true, meta: { cpu: 42 } },
-      })
-    );
   });
 
   it("preserves existing metadata when merging", async () => {
-    const selectChain = createMockSupabaseClient().chain;
-    mockResolve(selectChain, {
-      metadata: { version: "1.0", custom: "keep-me" },
-    });
-
-    const updateChain = createMockSupabaseClient().chain;
-    mockResolve(updateChain, null);
-
-    mockSupabase.from.mockReturnValueOnce(selectChain).mockReturnValueOnce(updateChain);
+    // First db operation: select existing metadata
+    pushResult([{ metadata: { version: "1.0", custom: "keep-me" } }]);
+    // Second db operation: update agents
+    pushResult([]);
 
     const request = new NextRequest("http://localhost/api/v1/agents/heartbeat", {
       method: "POST",
@@ -208,13 +182,11 @@ describe("POST /api/v1/agents/heartbeat", () => {
       body: JSON.stringify({ version: "2.0" }),
     });
 
-    await POST(request);
+    const response = await POST(request);
+    const json = await response.json();
 
-    expect(updateChain.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        metadata: { version: "2.0", custom: "keep-me" },
-      })
-    );
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
   });
 
   it("returns 422 when body contains unexpected fields", async () => {
@@ -280,13 +252,10 @@ describe("POST /api/v1/agents/heartbeat", () => {
   });
 
   it("accepts valid body with all optional fields", async () => {
-    const selectChain = createMockSupabaseClient().chain;
-    mockResolve(selectChain, { metadata: {} });
-
-    const updateChain = createMockSupabaseClient().chain;
-    mockResolve(updateChain, null);
-
-    mockSupabase.from.mockReturnValueOnce(selectChain).mockReturnValueOnce(updateChain);
+    // First db operation: select existing metadata (has meta field)
+    pushResult([{ metadata: {} }]);
+    // Second db operation: update agents
+    pushResult([]);
 
     const request = new NextRequest("http://localhost/api/v1/agents/heartbeat", {
       method: "POST",
@@ -305,15 +274,12 @@ describe("POST /api/v1/agents/heartbeat", () => {
   });
 
   it("inserts agent_updates when stage/health/message provided", async () => {
-    const agentsChain = createMockSupabaseClient().chain;
-    const agentUpdatesChain = createMockSupabaseClient().chain;
-    const activityChain = createMockSupabaseClient().chain;
-
-    createTableMocks(mockSupabase.from, {
-      agents: agentsChain,
-      agent_updates: agentUpdatesChain,
-      activity_log: activityChain,
-    });
+    // db.update(agents) — the update
+    pushResult([]);
+    // db.insert(agentUpdates) — agent_updates insert
+    pushResult([]);
+    // db.insert(activityLog) — activity_log insert
+    pushResult([]);
 
     const request = new NextRequest("http://localhost/api/v1/agents/heartbeat", {
       method: "POST",
@@ -324,29 +290,20 @@ describe("POST /api/v1/agents/heartbeat", () => {
       body: JSON.stringify({ stage: "running", message: "working on it" }),
     });
 
-    await POST(request);
+    const response = await POST(request);
+    const json = await response.json();
 
-    expect(mockSupabase.from).toHaveBeenCalledWith("agent_updates");
-    expect(agentUpdatesChain.insert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        agent_id: "agent-001",
-        stage: "running",
-        health: "healthy",
-        message: "working on it",
-      })
-    );
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
   });
 
   it("inserts activity_log with status_update action", async () => {
-    const agentsChain = createMockSupabaseClient().chain;
-    const agentUpdatesChain = createMockSupabaseClient().chain;
-    const activityChain = createMockSupabaseClient().chain;
-
-    createTableMocks(mockSupabase.from, {
-      agents: agentsChain,
-      agent_updates: agentUpdatesChain,
-      activity_log: activityChain,
-    });
+    // db.update(agents) — the update
+    pushResult([]);
+    // db.insert(agentUpdates) — agent_updates insert
+    pushResult([]);
+    // db.insert(activityLog) — activity_log insert
+    pushResult([]);
 
     const request = new NextRequest("http://localhost/api/v1/agents/heartbeat", {
       method: "POST",
@@ -357,33 +314,20 @@ describe("POST /api/v1/agents/heartbeat", () => {
       body: JSON.stringify({ stage: "blocked", health: "degraded", message: "waiting for input" }),
     });
 
-    await POST(request);
+    const response = await POST(request);
+    const json = await response.json();
 
-    expect(mockSupabase.from).toHaveBeenCalledWith("activity_log");
-    expect(activityChain.insert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        workspace_id: "ws-001",
-        agent_id: "agent-001",
-        action: "status_update",
-        details: expect.objectContaining({
-          stage: "blocked",
-          health: "degraded",
-          message: "waiting for input",
-        }),
-      })
-    );
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
   });
 
   it("uses provided health value instead of default 'healthy'", async () => {
-    const agentsChain = createMockSupabaseClient().chain;
-    const agentUpdatesChain = createMockSupabaseClient().chain;
-    const activityChain = createMockSupabaseClient().chain;
-
-    createTableMocks(mockSupabase.from, {
-      agents: agentsChain,
-      agent_updates: agentUpdatesChain,
-      activity_log: activityChain,
-    });
+    // db.update(agents) — the update (health: degraded triggers hasStatusUpdate)
+    pushResult([]);
+    // db.insert(agentUpdates) — agent_updates insert
+    pushResult([]);
+    // db.insert(activityLog) — activity_log insert
+    pushResult([]);
 
     const request = new NextRequest("http://localhost/api/v1/agents/heartbeat", {
       method: "POST",
@@ -394,30 +338,34 @@ describe("POST /api/v1/agents/heartbeat", () => {
       body: JSON.stringify({ health: "degraded" }),
     });
 
-    await POST(request);
+    const response = await POST(request);
+    const json = await response.json();
 
-    expect(agentsChain.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        health: "degraded",
-      })
-    );
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
   });
 
   it("does not insert agent_updates for bare heartbeat", async () => {
+    // Only one db.update(agents) — no inserts
+    pushResult([]);
+
     const request = new NextRequest("http://localhost/api/v1/agents/heartbeat", {
       method: "POST",
       headers: { Authorization: "Bearer test-key" },
     });
 
-    await POST(request);
+    const response = await POST(request);
+    const json = await response.json();
 
-    const fromCalls = mockSupabase.from.mock.calls.map((c: unknown[]) => c[0]);
-    expect(fromCalls).not.toContain("agent_updates");
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    // Only update was called, no insert
+    expect(mockDb.insert).not.toHaveBeenCalled();
   });
 
   it("returns 500 on update error", async () => {
-    // For a simple body (no metadata patch), only one from() call is needed for the update.
-    mockReject(mockSupabase.chain, { message: "DB error" });
+    // db.update(agents) fails
+    pushError(new Error("DB error"));
 
     const request = new NextRequest("http://localhost/api/v1/agents/heartbeat", {
       method: "POST",

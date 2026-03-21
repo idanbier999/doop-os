@@ -1,8 +1,20 @@
 "use server";
 
 import { z } from "zod";
-import { getAuthenticatedSupabase } from "@/lib/supabase/server-with-auth";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { requireAuth } from "@/lib/auth/session";
+import { requireWorkspaceMember } from "@/lib/db/auth";
+import { getDb } from "@/lib/db/client";
+import {
+  projects,
+  projectAgents,
+  projectFiles,
+  tasks,
+  taskAgents,
+  taskDependencies,
+  activityLog,
+  agents,
+} from "@/lib/db/schema";
+import { eq, and, inArray } from "drizzle-orm";
 import { dispatchToAgent } from "@/lib/webhook-dispatch";
 
 const createProjectSchema = z.object({
@@ -43,57 +55,58 @@ export async function createProject(data: {
     return { success: false, error: parsed.error.issues[0].message };
   }
 
-  const { user, supabase } = await getAuthenticatedSupabase();
-  if (!user || !supabase) return { success: false, error: "Not authenticated" };
+  let user;
+  try {
+    user = await requireAuth();
+  } catch {
+    return { success: false, error: "Not authenticated" };
+  }
 
   const validatedData = parsed.data;
 
   // Verify workspace membership
-  const { data: member } = await supabase
-    .from("workspace_members")
-    .select("role")
-    .eq("workspace_id", validatedData.workspaceId)
-    .eq("user_id", user.id)
-    .single();
-  if (!member) return { success: false, error: "Not a workspace member" };
+  try {
+    await requireWorkspaceMember(user.id, validatedData.workspaceId);
+  } catch {
+    return { success: false, error: "Not a workspace member" };
+  }
+
+  const db = getDb();
 
   // Create project
-  const { data: project, error: projectError } = await supabase
-    .from("projects")
-    .insert({
-      workspace_id: validatedData.workspaceId,
+  const [project] = await db
+    .insert(projects)
+    .values({
+      workspaceId: validatedData.workspaceId,
       name: validatedData.name,
       description: validatedData.description || null,
       instructions: validatedData.instructions || null,
-      orchestration_mode: validatedData.orchestration_mode,
-      lead_agent_id: validatedData.leadAgentId || null,
+      orchestrationMode: validatedData.orchestration_mode,
+      leadAgentId: validatedData.leadAgentId || null,
       status: validatedData.status,
-      created_by: user.id,
+      createdBy: user.id,
     })
-    .select("id")
-    .single();
+    .returning({ id: projects.id });
 
-  if (projectError || !project)
-    return {
-      success: false,
-      error: projectError?.message || "Failed to create project",
-    };
+  if (!project) {
+    return { success: false, error: "Failed to create project" };
+  }
 
   // Add agents to project
   if (validatedData.agentIds.length > 0) {
     const agentRows = validatedData.agentIds.map((agentId) => ({
-      project_id: project.id,
-      agent_id: agentId,
+      projectId: project.id,
+      agentId,
       role: agentId === validatedData.leadAgentId ? ("lead" as const) : ("member" as const),
       status: validatedData.status === "active" ? ("working" as const) : ("idle" as const),
     }));
-    await supabase.from("project_agents").insert(agentRows);
+    await db.insert(projectAgents).values(agentRows);
   }
 
   // Log activity
-  await supabase.from("activity_log").insert({
-    workspace_id: validatedData.workspaceId,
-    user_id: user.id,
+  await db.insert(activityLog).values({
+    workspaceId: validatedData.workspaceId,
+    userId: user.id,
     action: validatedData.status === "active" ? "project_launched" : "project_created",
     details: {
       project_id: project.id,
@@ -110,38 +123,45 @@ export async function updateProjectStatus(
   workspaceId: string,
   newStatus: string
 ) {
-  const { user, supabase } = await getAuthenticatedSupabase();
-  if (!user || !supabase) return { success: false, error: "Not authenticated" };
+  let user;
+  try {
+    user = await requireAuth();
+  } catch {
+    return { success: false, error: "Not authenticated" };
+  }
 
-  const { data: member } = await supabase
-    .from("workspace_members")
-    .select("role")
-    .eq("workspace_id", workspaceId)
-    .eq("user_id", user.id)
-    .single();
-  if (!member) return { success: false, error: "Not a workspace member" };
+  try {
+    await requireWorkspaceMember(user.id, workspaceId);
+  } catch {
+    return { success: false, error: "Not a workspace member" };
+  }
 
-  const { error } = await supabase
-    .from("projects")
-    .update({ status: newStatus, updated_at: new Date().toISOString() })
-    .eq("id", projectId)
-    .eq("workspace_id", workspaceId);
+  const db = getDb();
 
-  if (error) return { success: false, error: error.message };
+  await db
+    .update(projects)
+    .set({ status: newStatus, updatedAt: new Date() })
+    .where(and(eq(projects.id, projectId), eq(projects.workspaceId, workspaceId)));
 
   // When launching (draft -> active), set all project_agents to 'working'
   if (newStatus === "active") {
-    await supabase.from("project_agents").update({ status: "working" }).eq("project_id", projectId);
+    await db
+      .update(projectAgents)
+      .set({ status: "working" })
+      .where(eq(projectAgents.projectId, projectId));
   }
 
   // When pausing or cancelling, set agents to idle
   if (newStatus === "paused" || newStatus === "cancelled") {
-    await supabase.from("project_agents").update({ status: "idle" }).eq("project_id", projectId);
+    await db
+      .update(projectAgents)
+      .set({ status: "idle" })
+      .where(eq(projectAgents.projectId, projectId));
   }
 
-  await supabase.from("activity_log").insert({
-    workspace_id: workspaceId,
-    user_id: user.id,
+  await db.insert(activityLog).values({
+    workspaceId,
+    userId: user.id,
     action: `project_status_changed`,
     details: { project_id: projectId, new_status: newStatus },
   });
@@ -154,67 +174,85 @@ export async function updateProjectStatus(
  * webhook to the lead agent with full project context (instructions, files, team).
  */
 export async function launchProject(projectId: string, workspaceId: string) {
-  const { user, supabase } = await getAuthenticatedSupabase();
-  if (!user || !supabase) return { success: false, error: "Not authenticated" };
+  let user;
+  try {
+    user = await requireAuth();
+  } catch {
+    return { success: false, error: "Not authenticated" };
+  }
 
-  const { data: member } = await supabase
-    .from("workspace_members")
-    .select("role")
-    .eq("workspace_id", workspaceId)
-    .eq("user_id", user.id)
-    .single();
-  if (!member) return { success: false, error: "Not a workspace member" };
+  try {
+    await requireWorkspaceMember(user.id, workspaceId);
+  } catch {
+    return { success: false, error: "Not a workspace member" };
+  }
+
+  const db = getDb();
 
   // Fetch full project
-  const { data: project, error: projectError } = await supabase
-    .from("projects")
-    .select("*")
-    .eq("id", projectId)
-    .eq("workspace_id", workspaceId)
-    .single();
+  const [project] = await db
+    .select()
+    .from(projects)
+    .where(and(eq(projects.id, projectId), eq(projects.workspaceId, workspaceId)))
+    .limit(1);
 
-  if (projectError || !project) return { success: false, error: "Project not found" };
+  if (!project) return { success: false, error: "Project not found" };
 
   // Set project to active
-  const { error: updateError } = await supabase
-    .from("projects")
-    .update({ status: "active", updated_at: new Date().toISOString() })
-    .eq("id", projectId);
-
-  if (updateError) return { success: false, error: updateError.message };
+  await db
+    .update(projects)
+    .set({ status: "active", updatedAt: new Date() })
+    .where(eq(projects.id, projectId));
 
   // Set all project_agents to 'working'
-  await supabase.from("project_agents").update({ status: "working" }).eq("project_id", projectId);
+  await db
+    .update(projectAgents)
+    .set({ status: "working" })
+    .where(eq(projectAgents.projectId, projectId));
 
-  await supabase.from("activity_log").insert({
-    workspace_id: workspaceId,
-    user_id: user.id,
+  await db.insert(activityLog).values({
+    workspaceId,
+    userId: user.id,
     action: "project_launched",
     details: {
       project_id: projectId,
       name: project.name,
-      orchestration_mode: project.orchestration_mode,
+      orchestration_mode: project.orchestrationMode,
     },
   });
 
   // For lead_agent mode: dispatch project.launched webhook to the lead agent
-  if (project.orchestration_mode === "lead_agent" && project.lead_agent_id) {
-    const adminSupabase = createAdminClient();
-
+  if (project.orchestrationMode === "lead_agent" && project.leadAgentId) {
     // Gather team agents
-    const { data: projectAgents } = await adminSupabase
-      .from("project_agents")
-      .select("role, agent:agents(id, name, capabilities, agent_type)")
-      .eq("project_id", projectId);
+    const paRows = await db
+      .select({
+        role: projectAgents.role,
+        agentId: agents.id,
+        agentName: agents.name,
+        capabilities: agents.capabilities,
+        agentType: agents.agentType,
+      })
+      .from(projectAgents)
+      .innerJoin(agents, eq(projectAgents.agentId, agents.id))
+      .where(eq(projectAgents.projectId, projectId));
 
     // Gather project files metadata
-    const { data: projectFiles } = await adminSupabase
-      .from("project_files")
-      .select("id, file_name, file_path, mime_type, file_size")
-      .eq("project_id", projectId);
+    const files = await db
+      .select({
+        id: projectFiles.id,
+        fileName: projectFiles.fileName,
+        filePath: projectFiles.filePath,
+        mimeType: projectFiles.mimeType,
+        fileSize: projectFiles.fileSize,
+      })
+      .from(projectFiles)
+      .where(eq(projectFiles.projectId, projectId));
 
-    const teamAgents = (projectAgents ?? []).map((pa) => ({
-      ...(pa.agent as Record<string, unknown>),
+    const teamAgents = paRows.map((pa) => ({
+      id: pa.agentId,
+      name: pa.agentName,
+      capabilities: pa.capabilities,
+      agent_type: pa.agentType,
       role: pa.role,
     }));
 
@@ -226,14 +264,20 @@ export async function launchProject(projectId: string, workspaceId: string) {
         name: project.name,
         description: project.description,
         instructions: project.instructions,
-        orchestration_mode: project.orchestration_mode,
+        orchestration_mode: project.orchestrationMode,
       },
       team_agents: teamAgents,
-      files: projectFiles ?? [],
+      files: files.map((f) => ({
+        id: f.id,
+        file_name: f.fileName,
+        file_path: f.filePath,
+        mime_type: f.mimeType,
+        file_size: f.fileSize,
+      })),
     };
 
-    // Fire-and-forget — don't block the response on webhook success
-    dispatchToAgent(project.lead_agent_id, launchPayload).catch(console.error);
+    // Fire-and-forget -- don't block the response on webhook success
+    dispatchToAgent(project.leadAgentId, launchPayload).catch(console.error);
   }
 
   return { success: true };
@@ -244,26 +288,52 @@ export async function launchProject(projectId: string, workspaceId: string) {
  * Used in manual orchestration mode for pushing individual tasks.
  */
 export async function dispatchTaskToAgent(taskId: string, workspaceId: string) {
-  const { user, supabase } = await getAuthenticatedSupabase();
-  if (!user || !supabase) return { success: false, error: "Not authenticated" };
+  let user;
+  try {
+    user = await requireAuth();
+  } catch {
+    return { success: false, error: "Not authenticated" };
+  }
 
-  const { data: member } = await supabase
-    .from("workspace_members")
-    .select("role")
-    .eq("workspace_id", workspaceId)
-    .eq("user_id", user.id)
-    .single();
-  if (!member) return { success: false, error: "Not a workspace member" };
+  try {
+    await requireWorkspaceMember(user.id, workspaceId);
+  } catch {
+    return { success: false, error: "Not a workspace member" };
+  }
 
-  const { data: task, error: taskError } = await supabase
-    .from("tasks")
-    .select("*, project:projects(id, name, instructions, orchestration_mode)")
-    .eq("id", taskId)
-    .eq("workspace_id", workspaceId)
-    .single();
+  const db = getDb();
 
-  if (taskError || !task) return { success: false, error: "Task not found" };
-  if (!task.agent_id) return { success: false, error: "Task has no assigned agent" };
+  // Fetch task
+  const [task] = await db
+    .select()
+    .from(tasks)
+    .where(and(eq(tasks.id, taskId), eq(tasks.workspaceId, workspaceId)))
+    .limit(1);
+
+  if (!task) return { success: false, error: "Task not found" };
+  if (!task.agentId) return { success: false, error: "Task has no assigned agent" };
+
+  // Fetch project context if available
+  let project: {
+    id: string;
+    name: string;
+    instructions: string | null;
+    orchestrationMode: string;
+  } | null = null;
+
+  if (task.projectId) {
+    const [p] = await db
+      .select({
+        id: projects.id,
+        name: projects.name,
+        instructions: projects.instructions,
+        orchestrationMode: projects.orchestrationMode,
+      })
+      .from(projects)
+      .where(eq(projects.id, task.projectId))
+      .limit(1);
+    project = p ?? null;
+  }
 
   const taskPayload = {
     event: "task.assigned",
@@ -275,18 +345,25 @@ export async function dispatchTaskToAgent(taskId: string, workspaceId: string) {
       priority: task.priority,
       status: task.status,
     },
-    project: task.project ?? null,
-    agent: { id: task.agent_id },
+    project: project
+      ? {
+          id: project.id,
+          name: project.name,
+          instructions: project.instructions,
+          orchestration_mode: project.orchestrationMode,
+        }
+      : null,
+    agent: { id: task.agentId },
   };
 
-  const result = await dispatchToAgent(task.agent_id, taskPayload, task.id);
+  const result = await dispatchToAgent(task.agentId, taskPayload, task.id);
 
   if (result.success) {
-    await supabase.from("activity_log").insert({
-      workspace_id: workspaceId,
-      user_id: user.id,
+    await db.insert(activityLog).values({
+      workspaceId,
+      userId: user.id,
       action: "task_dispatched",
-      details: { task_id: task.id, title: task.title, agent_id: task.agent_id },
+      details: { task_id: task.id, title: task.title, agent_id: task.agentId },
     });
   }
 
@@ -309,56 +386,64 @@ export async function createProjectTask(data: {
 
   const validatedData = parsed.data;
 
-  const { user, supabase } = await getAuthenticatedSupabase();
-  if (!user || !supabase) return { success: false, error: "Not authenticated" };
+  let user;
+  try {
+    user = await requireAuth();
+  } catch {
+    return { success: false, error: "Not authenticated" };
+  }
 
-  const { data: member } = await supabase
-    .from("workspace_members")
-    .select("role")
-    .eq("workspace_id", validatedData.workspaceId)
-    .eq("user_id", user.id)
-    .single();
-  if (!member) return { success: false, error: "Not a workspace member" };
+  try {
+    await requireWorkspaceMember(user.id, validatedData.workspaceId);
+  } catch {
+    return { success: false, error: "Not a workspace member" };
+  }
 
-  const { data: task, error: taskError } = await supabase
-    .from("tasks")
-    .insert({
-      workspace_id: validatedData.workspaceId,
-      project_id: validatedData.projectId,
+  const db = getDb();
+
+  const [task] = await db
+    .insert(tasks)
+    .values({
+      workspaceId: validatedData.workspaceId,
+      projectId: validatedData.projectId,
       title: validatedData.title,
       description: validatedData.description || null,
       priority: validatedData.priority,
       status: "pending",
-      agent_id: validatedData.assignedAgentId || null,
-      created_by: user.id,
+      agentId: validatedData.assignedAgentId || null,
+      createdBy: user.id,
     })
-    .select("id")
-    .single();
+    .returning({ id: tasks.id });
 
-  if (taskError || !task)
-    return { success: false, error: taskError?.message || "Failed to create task" };
+  if (!task) {
+    return { success: false, error: "Failed to create task" };
+  }
 
   if (validatedData.assignedAgentId) {
-    await supabase.from("task_agents").insert({
-      task_id: task.id,
-      agent_id: validatedData.assignedAgentId,
+    await db.insert(taskAgents).values({
+      taskId: task.id,
+      agentId: validatedData.assignedAgentId,
       role: "assignee",
     });
   }
 
   if (validatedData.dependsOnTaskIds && validatedData.dependsOnTaskIds.length > 0) {
     const depRows = validatedData.dependsOnTaskIds.map((depId) => ({
-      task_id: task.id,
-      depends_on_task_id: depId,
+      taskId: task.id,
+      dependsOnTaskId: depId,
     }));
-    await supabase.from("task_dependencies").insert(depRows);
+    await db.insert(taskDependencies).values(depRows);
   }
 
-  await supabase.from("activity_log").insert({
-    workspace_id: validatedData.workspaceId,
-    user_id: user.id,
+  await db.insert(activityLog).values({
+    workspaceId: validatedData.workspaceId,
+    userId: user.id,
     action: "task_created",
-    details: { task_id: task.id, title: validatedData.title, project_id: validatedData.projectId },
+    details: {
+      task_id: task.id,
+      title: validatedData.title,
+      project_id: validatedData.projectId,
+    },
   });
 
   return { success: true, taskId: task.id };
@@ -372,31 +457,33 @@ export async function addProjectFile(data: {
   fileSize?: number;
   mimeType?: string;
 }) {
-  const { user, supabase } = await getAuthenticatedSupabase();
-  if (!user || !supabase) return { success: false, error: "Not authenticated" };
+  let user;
+  try {
+    user = await requireAuth();
+  } catch {
+    return { success: false, error: "Not authenticated" };
+  }
 
-  const { data: member } = await supabase
-    .from("workspace_members")
-    .select("role")
-    .eq("workspace_id", data.workspaceId)
-    .eq("user_id", user.id)
-    .single();
-  if (!member) return { success: false, error: "Not a workspace member" };
+  try {
+    await requireWorkspaceMember(user.id, data.workspaceId);
+  } catch {
+    return { success: false, error: "Not a workspace member" };
+  }
 
-  const { error } = await supabase.from("project_files").insert({
-    project_id: data.projectId,
-    file_name: data.fileName,
-    file_path: data.filePath,
-    file_size: data.fileSize || null,
-    mime_type: data.mimeType || null,
-    uploaded_by: user.id,
+  const db = getDb();
+
+  await db.insert(projectFiles).values({
+    projectId: data.projectId,
+    fileName: data.fileName,
+    filePath: data.filePath,
+    fileSize: data.fileSize || null,
+    mimeType: data.mimeType || null,
+    uploadedBy: user.id,
   });
 
-  if (error) return { success: false, error: error.message };
-
-  await supabase.from("activity_log").insert({
-    workspace_id: data.workspaceId,
-    user_id: user.id,
+  await db.insert(activityLog).values({
+    workspaceId: data.workspaceId,
+    userId: user.id,
     action: "file_uploaded",
     details: { project_id: data.projectId, file_name: data.fileName },
   });

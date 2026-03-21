@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useSupabase } from "@/hooks/use-supabase";
 import { useWorkspace } from "@/contexts/workspace-context";
 import { Card, CardHeader, CardBody } from "@/components/ui/card";
 import { Table, Thead, Tbody, Tr, Th, Td } from "@/components/ui/table";
@@ -9,21 +8,24 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { updateMemberRole, removeMember } from "@/app/dashboard/settings/team-actions";
+import {
+  updateMemberRole,
+  removeMember,
+  getTeamMembers,
+} from "@/app/dashboard/settings/team-actions";
 import { InviteLinkModal } from "@/components/settings/invite-link-modal";
 import { PendingInvitations } from "@/components/settings/pending-invitations";
 
 interface MemberRow {
   id: string;
-  user_id: string;
+  userId: string;
   role: string;
-  created_at: string | null;
-  email?: string;
+  createdAt: string | null;
+  name: string;
 }
 
 export function TeamMembers() {
   const { workspaceId, userId, userRole } = useWorkspace();
-  const supabase = useSupabase();
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
@@ -35,66 +37,16 @@ export function TeamMembers() {
   const isOwner = userRole === "owner";
 
   const loadMembers = useCallback(async () => {
-    const { data: memberData } = await supabase
-      .from("workspace_members")
-      .select("id, user_id, role, created_at")
-      .eq("workspace_id", workspaceId)
-      .order("created_at");
-
-    const { data: emailData } = await supabase.rpc("get_workspace_member_emails", {
-      ws_id: workspaceId,
-    });
-
-    const emailMap = new Map<string, string>();
-    if (emailData) {
-      for (const row of emailData) {
-        emailMap.set(row.user_id, row.email);
-      }
+    const result = await getTeamMembers(workspaceId);
+    if (result.members) {
+      setMembers(result.members);
     }
-
-    const enriched: MemberRow[] = (memberData || []).map((m) => ({
-      ...m,
-      email: emailMap.get(m.user_id) || "Unknown",
-    }));
-
-    setMembers(enriched);
     setLoading(false);
-  }, [workspaceId, supabase]);
+  }, [workspaceId]);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const { data: memberData } = await supabase
-        .from("workspace_members")
-        .select("id, user_id, role, created_at")
-        .eq("workspace_id", workspaceId)
-        .order("created_at");
-
-      const { data: emailData } = await supabase.rpc("get_workspace_member_emails", {
-        ws_id: workspaceId,
-      });
-
-      if (cancelled) return;
-
-      const emailMap = new Map<string, string>();
-      if (emailData) {
-        for (const row of emailData) {
-          emailMap.set(row.user_id, row.email);
-        }
-      }
-
-      const enriched: MemberRow[] = (memberData || []).map((m) => ({
-        ...m,
-        email: emailMap.get(m.user_id) || "Unknown",
-      }));
-
-      setMembers(enriched);
-      setLoading(false);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [workspaceId, supabase]);
+    loadMembers();
+  }, [loadMembers]);
 
   const handleRoleChange = async (memberId: string, newRole: string) => {
     if (newRole !== "admin" && newRole !== "member") return;
@@ -125,13 +77,13 @@ export function TeamMembers() {
 
   const canChangeRole = (member: MemberRow) => {
     if (!isOwner) return false;
-    if (member.user_id === userId) return false;
+    if (member.userId === userId) return false;
     if (member.role === "owner") return false;
     return true;
   };
 
   const canRemove = (member: MemberRow) => {
-    if (member.user_id === userId) return false;
+    if (member.userId === userId) return false;
     if (member.role === "owner") return false;
     if (isOwner) return true;
     if (userRole === "admin" && member.role === "member") return true;
@@ -167,7 +119,7 @@ export function TeamMembers() {
             <Table>
               <Thead>
                 <Tr>
-                  <Th>Email</Th>
+                  <Th>Name</Th>
                   <Th>Role</Th>
                   <Th>Joined</Th>
                   {isOwnerOrAdmin && <Th>Actions</Th>}
@@ -178,8 +130,8 @@ export function TeamMembers() {
                   <Tr key={member.id}>
                     <Td>
                       <span className="text-mac-black">
-                        {member.email}
-                        {member.user_id === userId && (
+                        {member.name}
+                        {member.userId === userId && (
                           <span className="text-mac-dark-gray ml-1">(you)</span>
                         )}
                       </span>
@@ -200,7 +152,7 @@ export function TeamMembers() {
                       )}
                     </Td>
                     <Td>
-                      {member.created_at ? new Date(member.created_at).toLocaleDateString() : "-"}
+                      {member.createdAt ? new Date(member.createdAt).toLocaleDateString() : "-"}
                     </Td>
                     {isOwnerOrAdmin && (
                       <Td>
@@ -234,8 +186,8 @@ export function TeamMembers() {
 
       <Modal open={!!removeTarget} onClose={() => setRemoveTarget(null)} title="Remove Member">
         <p className="text-sm text-mac-black mb-4 font-[family-name:var(--font-pixel)]">
-          Are you sure you want to remove <strong>{removeTarget?.email}</strong> from this
-          workspace? They will lose access immediately.
+          Are you sure you want to remove <strong>{removeTarget?.name}</strong> from this workspace?
+          They will lose access immediately.
         </p>
         <div className="flex gap-3 justify-end">
           <Button variant="secondary" size="sm" onClick={() => setRemoveTarget(null)}>

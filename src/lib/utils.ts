@@ -5,7 +5,7 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function relativeTime(dateStr: string | null): string {
+export function relativeTime(dateStr: string | Date | null): string {
   if (!dateStr) return "Never";
   const now = Date.now();
   const then = new Date(dateStr).getTime();
@@ -19,7 +19,7 @@ export function relativeTime(dateStr: string | null): string {
   return `${diffDay}d ago`;
 }
 
-export function formatDate(dateStr: string | null): string {
+export function formatDate(dateStr: string | Date | null): string {
   if (!dateStr) return "-";
   return new Date(dateStr).toLocaleDateString("en-US", {
     month: "short",

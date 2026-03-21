@@ -1,8 +1,8 @@
-import { getAuthenticatedSupabase } from "@/lib/supabase/server-with-auth";
+import { getSession } from "@/lib/auth/session";
 import { redirect } from "next/navigation";
 
 export default async function RootPage() {
-  const { user } = await getAuthenticatedSupabase();
+  const user = await getSession();
 
   if (user) {
     redirect("/dashboard");

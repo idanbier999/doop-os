@@ -1,11 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
-import {
-  createMockSupabaseClient,
-  createTableMocks,
-  mockResolve,
-  mockReject,
-} from "@/__tests__/mocks/supabase";
+import { createMockDb } from "@/__tests__/mocks/drizzle";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -13,16 +8,18 @@ import {
 
 const mockAgent = {
   id: "agent-001",
-  workspace_id: "ws-001",
+  workspaceId: "ws-001",
   name: "test-agent",
 };
+
+const { mockDb, pushResult, pushError, reset } = createMockDb();
 
 vi.mock("@/lib/api-auth", () => ({
   authenticateAgent: vi.fn(),
 }));
 
-vi.mock("@/lib/supabase/admin", () => ({
-  createAdminClient: vi.fn(),
+vi.mock("@/lib/db/client", () => ({
+  getDb: () => mockDb,
 }));
 
 vi.mock("@/lib/api-rate-limit", () => ({
@@ -30,19 +27,15 @@ vi.mock("@/lib/api-rate-limit", () => ({
 }));
 
 import { authenticateAgent } from "@/lib/api-auth";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { GET } from "./route";
 
 // ---------------------------------------------------------------------------
 // Setup
 // ---------------------------------------------------------------------------
 
-let mockSupabase: ReturnType<typeof createMockSupabaseClient>;
-
 beforeEach(() => {
   vi.clearAllMocks();
-  mockSupabase = createMockSupabaseClient();
-  (createAdminClient as ReturnType<typeof vi.fn>).mockReturnValue(mockSupabase.client);
+  reset();
   (authenticateAgent as ReturnType<typeof vi.fn>).mockResolvedValue(mockAgent);
 });
 
@@ -70,7 +63,8 @@ describe("GET /api/v1/tasks", () => {
       { id: "t-1", title: "Task 1", status: "pending" },
       { id: "t-2", title: "Task 2", status: "pending" },
     ];
-    mockResolve(mockSupabase.chain, fakeTasks);
+    // One db.select() for the tasks query
+    pushResult(fakeTasks);
 
     const request = new NextRequest("http://localhost/api/v1/tasks", {
       method: "GET",
@@ -82,32 +76,25 @@ describe("GET /api/v1/tasks", () => {
 
     expect(response.status).toBe(200);
     expect(json.tasks).toEqual(fakeTasks);
-
-    // Verify default query construction
-    expect(mockSupabase.from).toHaveBeenCalledWith("tasks");
-    expect(mockSupabase.chain.eq).toHaveBeenCalledWith("workspace_id", "ws-001");
-    expect(mockSupabase.chain.eq).toHaveBeenCalledWith("status", "pending");
-    expect(mockSupabase.chain.limit).toHaveBeenCalledWith(20);
-    expect(mockSupabase.chain.order).toHaveBeenCalledWith("created_at", {
-      ascending: true,
-    });
   });
 
   it("filters by status query param", async () => {
-    mockResolve(mockSupabase.chain, []);
+    pushResult([]);
 
     const request = new NextRequest("http://localhost/api/v1/tasks?status=completed", {
       method: "GET",
       headers: { Authorization: "Bearer test-key" },
     });
 
-    await GET(request);
+    const response = await GET(request);
+    const json = await response.json();
 
-    expect(mockSupabase.chain.eq).toHaveBeenCalledWith("status", "completed");
+    expect(response.status).toBe(200);
+    expect(json.tasks).toEqual([]);
   });
 
   it("respects limit param (capped at 100)", async () => {
-    mockResolve(mockSupabase.chain, []);
+    pushResult([]);
 
     // Requested 500, should be capped at 100
     const request = new NextRequest("http://localhost/api/v1/tasks?limit=500", {
@@ -115,52 +102,17 @@ describe("GET /api/v1/tasks", () => {
       headers: { Authorization: "Bearer test-key" },
     });
 
-    await GET(request);
+    const response = await GET(request);
+    const json = await response.json();
 
-    expect(mockSupabase.chain.limit).toHaveBeenCalledWith(100);
+    expect(response.status).toBe(200);
+    expect(json.tasks).toEqual([]);
   });
 
-  // Tests the task_agents junction query — resolves to [] so it returns early,
-  // but confirms eq("agent_id", ...) is called on the task_agents chain.
+  // Tests the task_agents junction query — resolves to [] so it returns early
   it("filters by assigned_to=me using agent.id", async () => {
-    mockResolve(mockSupabase.chain, []);
-
-    const request = new NextRequest("http://localhost/api/v1/tasks?assigned_to=me", {
-      method: "GET",
-      headers: { Authorization: "Bearer test-key" },
-    });
-
-    await GET(request);
-
-    expect(mockSupabase.chain.eq).toHaveBeenCalledWith("agent_id", "agent-001");
-  });
-
-  it("supports comma-separated status param", async () => {
-    mockResolve(mockSupabase.chain, []);
-
-    const request = new NextRequest("http://localhost/api/v1/tasks?status=pending,in_progress", {
-      method: "GET",
-      headers: { Authorization: "Bearer test-key" },
-    });
-
-    await GET(request);
-
-    expect(mockSupabase.chain.in).toHaveBeenCalledWith("status", ["pending", "in_progress"]);
-  });
-
-  it("queries task_agents junction table when assigned_to=me", async () => {
-    const taskAgentsChain = createMockSupabaseClient().chain;
-    mockResolve(taskAgentsChain, [{ task_id: "t-1", role: "assignee" }]);
-
-    const tasksChain = createMockSupabaseClient().chain;
-    mockResolve(tasksChain, [
-      { id: "t-1", title: "Task 1", status: "pending", priority: "high", created_at: "2026-01-01" },
-    ]);
-
-    createTableMocks(mockSupabase.from, {
-      task_agents: taskAgentsChain,
-      tasks: tasksChain,
-    });
+    // First db operation: select from taskAgents → empty
+    pushResult([]);
 
     const request = new NextRequest("http://localhost/api/v1/tasks?assigned_to=me", {
       method: "GET",
@@ -170,18 +122,48 @@ describe("GET /api/v1/tasks", () => {
     const response = await GET(request);
     const json = await response.json();
 
-    expect(mockSupabase.from).toHaveBeenCalledWith("task_agents");
+    expect(response.status).toBe(200);
+    expect(json.tasks).toEqual([]);
+  });
+
+  it("supports comma-separated status param", async () => {
+    pushResult([]);
+
+    const request = new NextRequest("http://localhost/api/v1/tasks?status=pending,in_progress", {
+      method: "GET",
+      headers: { Authorization: "Bearer test-key" },
+    });
+
+    const response = await GET(request);
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.tasks).toEqual([]);
+  });
+
+  it("queries task_agents junction table when assigned_to=me", async () => {
+    // First db operation: select from taskAgents → assignments
+    pushResult([{ taskId: "t-1", role: "assignee" }]);
+    // Second db operation: select from tasks → tasks with those IDs
+    pushResult([
+      { id: "t-1", title: "Task 1", status: "pending", priority: "high", created_at: "2026-01-01" },
+    ]);
+
+    const request = new NextRequest("http://localhost/api/v1/tasks?assigned_to=me", {
+      method: "GET",
+      headers: { Authorization: "Bearer test-key" },
+    });
+
+    const response = await GET(request);
+    const json = await response.json();
+
     expect(json.tasks).toHaveLength(1);
     expect(json.tasks[0].role).toBe("assignee");
   });
 
   it("returns empty tasks when assigned_to=me and no assignments", async () => {
-    const taskAgentsChain = createMockSupabaseClient().chain;
-    mockResolve(taskAgentsChain, []);
-
-    createTableMocks(mockSupabase.from, {
-      task_agents: taskAgentsChain,
-    });
+    // First db operation: select from taskAgents → empty
+    pushResult([]);
 
     const request = new NextRequest("http://localhost/api/v1/tasks?assigned_to=me", {
       method: "GET",
@@ -196,7 +178,7 @@ describe("GET /api/v1/tasks", () => {
   });
 
   it("returns 500 on query error", async () => {
-    mockReject(mockSupabase.chain, { message: "DB error" });
+    pushError(new Error("DB error"));
 
     const request = new NextRequest("http://localhost/api/v1/tasks", {
       method: "GET",

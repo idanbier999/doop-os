@@ -1,18 +1,9 @@
+// @vitest-environment jsdom
 import { render, screen } from "@testing-library/react";
 import { AgentHealthGrid } from "@/components/fleet/agent-health-grid";
 
-vi.mock("@/hooks/use-realtime", () => ({
-  useRealtime: vi.fn(),
-}));
-
-vi.mock("@/hooks/use-supabase", () => ({
-  useSupabase: vi.fn(() => ({
-    from: vi.fn().mockReturnValue({
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      in: vi.fn().mockReturnThis(),
-    }),
-  })),
+vi.mock("@/hooks/use-realtime-events", () => ({
+  useRealtimeEvents: vi.fn(),
 }));
 
 vi.mock("@/contexts/workspace-context", () => ({

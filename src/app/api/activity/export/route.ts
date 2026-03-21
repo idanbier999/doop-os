@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import type { Database } from "@/lib/database.types";
-import { getAuthenticatedSupabase } from "@/lib/supabase/server-with-auth";
+import { getDb } from "@/lib/db/client";
+import { activityLog, agents, workspaceMembers } from "@/lib/db/schema";
+import { eq, and, gte, lt, inArray, notInArray } from "drizzle-orm";
+import { desc } from "drizzle-orm";
+import { getSession } from "@/lib/auth/session";
+
+import { CATEGORY_ACTIONS, ALL_KNOWN_ACTIONS } from "@/lib/activity-categories";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -9,11 +14,11 @@ import { getAuthenticatedSupabase } from "@/lib/supabase/server-with-auth";
 type ActivityRow = {
   id: string;
   action: string;
-  details: Database["public"]["Tables"]["activity_log"]["Row"]["details"];
-  created_at: string | null;
+  details: unknown;
+  created_at: Date | null;
   user_id: string | null;
   workspace_id: string;
-  agents: { name: string } | null;
+  agent_name: string | null;
 };
 
 type ExportRecord = {
@@ -24,20 +29,14 @@ type ExportRecord = {
   user: string;
 };
 
-import { CATEGORY_ACTIONS, ALL_KNOWN_ACTIONS } from "@/lib/activity-categories";
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 /**
  * Flatten a `details` JSON value into a human-readable string.
- * - Simple objects (all values are primitives): "key=value; key=value"
- * - Arrays or nested objects: JSON.stringify
- * - Primitives: coerce to string
- * - null / undefined: empty string
  */
-function flattenDetails(details: ActivityRow["details"]): string {
+function flattenDetails(details: unknown): string {
   if (details === null || details === undefined) {
     return "";
   }
@@ -46,7 +45,6 @@ function flattenDetails(details: ActivityRow["details"]): string {
     return JSON.stringify(details);
   }
 
-  // Plain object — check if all values are primitive
   const entries = Object.entries(details as Record<string, unknown>);
   const allPrimitive = entries.every(([, v]) => {
     return v === null || typeof v !== "object";
@@ -60,9 +58,7 @@ function flattenDetails(details: ActivityRow["details"]): string {
 }
 
 /**
- * Escape a single CSV field value. Wraps the value in double quotes when it
- * contains a comma, double-quote, or newline. Existing double-quotes are
- * doubled per RFC 4180.
+ * Escape a single CSV field value.
  */
 function escapeCSVField(value: string): string {
   let safe = value;
@@ -128,49 +124,40 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   // -------------------------------------------------------------------------
-  // 2. Authenticate via Better Auth
+  // 2. Authenticate via session
   // -------------------------------------------------------------------------
-  const { user, supabase } = await getAuthenticatedSupabase();
+  const user = await getSession();
 
-  if (!user || !supabase) {
+  if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
   // -------------------------------------------------------------------------
-  // 4. Authorize — verify workspace membership
+  // 3. Authorize — verify workspace membership
   // -------------------------------------------------------------------------
-  const { data: membership, error: membershipError } = await supabase
-    .from("workspace_members")
-    .select("id")
-    .eq("user_id", user.id)
-    .eq("workspace_id", workspaceId)
-    .maybeSingle();
+  const db = getDb();
 
-  if (membershipError) {
-    console.error("[activity/export] membership check error:", membershipError);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-  }
+  const membershipRows = await db
+    .select({ id: workspaceMembers.id })
+    .from(workspaceMembers)
+    .where(and(eq(workspaceMembers.userId, user.id), eq(workspaceMembers.workspaceId, workspaceId)))
+    .limit(1);
 
-  if (!membership) {
+  if (membershipRows.length === 0) {
     return NextResponse.json({ error: "Not authorized for this workspace" }, { status: 403 });
   }
 
   // -------------------------------------------------------------------------
-  // 5. Build query
+  // 4. Build conditions
   // -------------------------------------------------------------------------
-  let query = supabase
-    .from("activity_log")
-    .select("id, action, details, created_at, user_id, workspace_id, agents(name)")
-    .eq("workspace_id", workspaceId)
-    .order("created_at", { ascending: false })
-    .limit(10001); // Fetch one extra row to detect overflow
+  const conditions = [eq(activityLog.workspaceId, workspaceId)];
 
   // Optional: from date (inclusive)
   if (from) {
     if (isNaN(Date.parse(from))) {
       return NextResponse.json({ error: "Invalid 'from' date" }, { status: 400 });
     }
-    query = query.gte("created_at", from);
+    conditions.push(gte(activityLog.createdAt, new Date(from)));
   }
 
   // Optional: to date (inclusive — treat as end-of-day by adding one day)
@@ -181,40 +168,55 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
     const toDate = new Date(parsed);
     toDate.setDate(toDate.getDate() + 1);
-    query = query.lt("created_at", toDate.toISOString());
+    conditions.push(lt(activityLog.createdAt, toDate));
   }
 
   // Optional: agent filter
   if (agentId) {
-    query = query.eq("agent_id", agentId);
+    conditions.push(eq(activityLog.agentId, agentId));
   }
 
   // Optional: category filter
   if (category) {
     if (category === "audit_trail") {
       // All actions that are NOT in any known category
-      query = query.not("action", "in", `(${ALL_KNOWN_ACTIONS.join(",")})`);
+      conditions.push(notInArray(activityLog.action, ALL_KNOWN_ACTIONS));
     } else if (CATEGORY_ACTIONS[category]) {
-      query = query.in("action", CATEGORY_ACTIONS[category]);
+      conditions.push(inArray(activityLog.action, CATEGORY_ACTIONS[category]));
     } else {
       return NextResponse.json({ error: `Unknown category: "${category}"` }, { status: 400 });
     }
   }
 
   // -------------------------------------------------------------------------
-  // 6. Execute query and enforce row limit
+  // 5. Execute query with left join for agent name
   // -------------------------------------------------------------------------
-  const { data: rows, error: queryError } = await query;
+  let rows: ActivityRow[];
+  try {
+    const result = await db
+      .select({
+        id: activityLog.id,
+        action: activityLog.action,
+        details: activityLog.details,
+        created_at: activityLog.createdAt,
+        user_id: activityLog.userId,
+        workspace_id: activityLog.workspaceId,
+        agent_name: agents.name,
+      })
+      .from(activityLog)
+      .leftJoin(agents, eq(activityLog.agentId, agents.id))
+      .where(and(...conditions))
+      .orderBy(desc(activityLog.createdAt))
+      .limit(10001); // Fetch one extra row to detect overflow
 
-  if (queryError) {
-    console.error("[activity/export] query error:", queryError);
+    rows = result;
+  } catch (err) {
+    console.error("[activity/export] query error:", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 
-  if (!rows || rows.length === 0) {
-    // Return an empty export rather than an error
-    const emptyRows: ActivityRow[] = [];
-    return buildResponse(format, emptyRows);
+  if (rows.length === 0) {
+    return buildResponse(format, []);
   }
 
   if (rows.length > 10000) {
@@ -224,7 +226,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  return buildResponse(format, rows as ActivityRow[]);
+  return buildResponse(format, rows);
 }
 
 // ---------------------------------------------------------------------------
@@ -244,8 +246,8 @@ function buildResponse(format: "csv" | "json", rows: ActivityRow[]): NextRespons
 
 function toExportRecord(row: ActivityRow): ExportRecord {
   return {
-    timestamp: row.created_at ?? "",
-    agent_name: row.agents?.name ?? "",
+    timestamp: row.created_at?.toISOString() ?? "",
+    agent_name: row.agent_name ?? "",
     action: row.action,
     details: flattenDetails(row.details),
     user: row.user_id ?? "",

@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateAgent } from "@/lib/api-auth";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { getDb } from "@/lib/db/client";
+import { projects, projectAgents, projectFiles, agents } from "@/lib/db/schema";
+import { eq, and } from "drizzle-orm";
 import { withRateLimit } from "@/lib/api-rate-limit";
+import { getStorage } from "@/lib/storage";
 
 async function handleGet(request: NextRequest, context?: unknown) {
   const agent = await authenticateAgent(request);
@@ -12,99 +15,88 @@ async function handleGet(request: NextRequest, context?: unknown) {
   const { params } = context as { params: Promise<{ id: string }> };
   const { id } = await params;
 
-  const supabase = createAdminClient();
+  const db = getDb();
 
   // Verify agent is a project member
-  const { data: membership } = await supabase
-    .from("project_agents")
-    .select("role")
-    .eq("project_id", id)
-    .eq("agent_id", agent.id)
-    .single();
+  const membershipRows = await db
+    .select({ role: projectAgents.role })
+    .from(projectAgents)
+    .where(and(eq(projectAgents.projectId, id), eq(projectAgents.agentId, agent.id)))
+    .limit(1);
 
+  const membership = membershipRows[0];
   if (!membership) {
     return NextResponse.json({ error: "Agent is not a member of this project" }, { status: 403 });
   }
 
   // Fetch project
-  const { data: project, error: projectError } = await supabase
-    .from("projects")
-    .select(
-      "id, name, description, instructions, orchestration_mode, status, created_at, updated_at"
-    )
-    .eq("id", id)
-    .eq("workspace_id", agent.workspace_id)
-    .single();
+  const projectRows = await db
+    .select({
+      id: projects.id,
+      name: projects.name,
+      description: projects.description,
+      instructions: projects.instructions,
+      orchestration_mode: projects.orchestrationMode,
+      status: projects.status,
+      created_at: projects.createdAt,
+      updated_at: projects.updatedAt,
+    })
+    .from(projects)
+    .where(and(eq(projects.id, id), eq(projects.workspaceId, agent.workspaceId)))
+    .limit(1);
 
-  if (projectError || !project) {
+  const project = projectRows[0];
+  if (!project) {
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }
 
-  // Fetch team
-  const { data: teamRaw } = await supabase
-    .from("project_agents")
-    .select(
-      "role, status, agent:agents!project_agents_agent_id_fkey(id, name, capabilities, agent_type, health, webhook_url)"
-    )
-    .eq("project_id", id);
+  // Fetch team with agent details via join
+  const teamRaw = await db
+    .select({
+      role: projectAgents.role,
+      status: projectAgents.status,
+      agentId: agents.id,
+      agentName: agents.name,
+      agentCapabilities: agents.capabilities,
+      agentType: agents.agentType,
+      agentHealth: agents.health,
+      agentWebhookUrl: agents.webhookUrl,
+    })
+    .from(projectAgents)
+    .innerJoin(agents, eq(projectAgents.agentId, agents.id))
+    .where(eq(projectAgents.projectId, id));
 
-  interface ProjectTeamMember {
-    role: string;
-    status: string;
-    agent: {
-      id: string;
-      name: string;
-      capabilities: string[] | null;
-      agent_type: string | null;
-      health: string;
-      webhook_url: string | null;
-    } | null;
-  }
-
-  const team = (teamRaw ?? []).map((member: ProjectTeamMember) => ({
+  const team = teamRaw.map((member) => ({
     role: member.role,
     status: member.status,
-    agent: member.agent
-      ? {
-          id: member.agent.id,
-          name: member.agent.name,
-          capabilities: member.agent.capabilities,
-          agent_type: member.agent.agent_type,
-          health: member.agent.health,
-          has_webhook: !!member.agent.webhook_url,
-        }
-      : null,
+    agent: {
+      id: member.agentId,
+      name: member.agentName,
+      capabilities: member.agentCapabilities,
+      agent_type: member.agentType,
+      health: member.agentHealth,
+      has_webhook: !!member.agentWebhookUrl,
+    },
   }));
 
   // Fetch files
-  const { data: files } = await supabase
-    .from("project_files")
-    .select("id, file_name, file_path, mime_type, file_size")
-    .eq("project_id", id);
+  const files = await db
+    .select({
+      id: projectFiles.id,
+      file_name: projectFiles.fileName,
+      file_path: projectFiles.filePath,
+      mime_type: projectFiles.mimeType,
+      file_size: projectFiles.fileSize,
+    })
+    .from(projectFiles)
+    .where(eq(projectFiles.projectId, id));
 
-  // Generate signed URLs for files
-  const filesWithUrls = await Promise.all(
-    (files ?? []).map(
-      async (file: {
-        id: string;
-        file_name: string;
-        file_path: string;
-        mime_type: string | null;
-        file_size: number | null;
-      }) => {
-        let signed_url: string | null = null;
-        try {
-          const { data: signedData } = await supabase.storage
-            .from("project-files")
-            .createSignedUrl(file.file_path, 3600);
-          signed_url = signedData?.signedUrl ?? null;
-        } catch {
-          // Don't block response if signing fails
-        }
-        return { ...file, signed_url };
-      }
-    )
-  );
+  // Generate URLs for files using local storage provider
+  const storage = getStorage();
+  const filesWithUrls = files.map((file) => ({
+    ...file,
+    url: storage.getUrl("project-files", file.file_path),
+  }));
 
   return NextResponse.json({
     project,

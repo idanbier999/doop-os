@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Changed
+
+- Migrated from Supabase to embedded-postgres + Drizzle ORM
+- Replaced Better Auth with custom cookie-based sessions
+- Zero-config development: `npm run dev` auto-starts database, runs migrations, seeds data
+- Removed Docker and Supabase CLI as development prerequisites
+- Simplified `create-doop` CLI — no external dependencies needed
+
+### Removed
+
+- Supabase client libraries and RLS policies
+- Better Auth dependency
+- Google OAuth (temporary)
+- Supabase Realtime subscriptions (replaced with polling)
+- Supabase Storage (replaced with local file storage)
+
 ## [0.1.0] - 2026-03-15
 
 Initial open-source release.

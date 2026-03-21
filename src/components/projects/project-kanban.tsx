@@ -1,11 +1,10 @@
 "use client";
 
 import { useState, useCallback, useMemo } from "react";
-import { useRealtime } from "@/hooks/use-realtime";
-import { useSupabase } from "@/hooks/use-supabase";
+import { useRouter } from "next/navigation";
+import { useRealtimeEvents } from "@/hooks/use-realtime-events";
 import { TaskCard } from "@/components/tasks/task-card";
 import type { TaskWithAgents } from "@/lib/types";
-import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 
 const COLUMNS = [
   { key: "pending", label: "Pending", color: "#666666" },
@@ -31,35 +30,20 @@ export function ProjectKanban({
   filters,
   onTaskClick,
 }: ProjectKanbanProps) {
-  const supabase = useSupabase();
+  const router = useRouter();
   const [tasks, setTasks] = useState<TaskWithAgents[]>(initialTasks);
 
-  const handlePayload = useCallback(
-    async (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
-      if (payload.eventType === "INSERT") {
-        const raw = payload.new as { id: string; project_id: string };
+  const handleEvent = useCallback(
+    (event: { event: string; new?: Record<string, unknown>; old?: Record<string, unknown> }) => {
+      if (event.event === "INSERT") {
+        const raw = event.new as { id: string; project_id: string };
         if (raw.project_id !== projectId) return;
-        // Re-fetch with join so task_agents enrichment is included
-        const { data } = await supabase
-          .from("tasks")
-          .select("*, task_agents(agent_id, role, agents(name))")
-          .eq("id", raw.id)
-          .single();
-        if (data) {
-          setTasks((prev) => {
-            const idx = prev.findIndex((t) => t.id === data.id);
-            if (idx >= 0) {
-              const next = [...prev];
-              next[idx] = data as TaskWithAgents;
-              return next;
-            }
-            return [data as TaskWithAgents, ...prev];
-          });
-        }
-      } else if (payload.eventType === "UPDATE") {
-        const updated = payload.new as { id: string; project_id: string };
+        // SSE payloads don't include joined data — trigger server re-fetch
+        router.refresh();
+      } else if (event.event === "UPDATE") {
+        const updated = event.new as { id: string; project_id: string };
         if (updated.project_id === projectId) {
-          // Preserve task_agents — realtime payloads don't include joined data
+          // Preserve task_agents — SSE payloads don't include joined data
           setTasks((prev) =>
             prev.map((t) =>
               t.id === updated.id
@@ -70,18 +54,17 @@ export function ProjectKanban({
         } else {
           setTasks((prev) => prev.filter((t) => t.id !== updated.id));
         }
-      } else if (payload.eventType === "DELETE") {
-        const deleted = payload.old as unknown as { id: string };
+      } else if (event.event === "DELETE") {
+        const deleted = event.old as unknown as { id: string };
         setTasks((prev) => prev.filter((t) => t.id !== deleted.id));
       }
     },
-    [projectId, supabase]
+    [projectId, router]
   );
 
-  useRealtime({
+  useRealtimeEvents({
     table: "tasks",
-    filter: `project_id=eq.${projectId}`,
-    onPayload: handlePayload,
+    onEvent: handleEvent,
   });
 
   const filteredTasks = useMemo(() => {
@@ -90,7 +73,7 @@ export function ProjectKanban({
       if (filters.priority && t.priority !== filters.priority) return false;
       if (filters.agentId) {
         const assignedViaJunction = t.task_agents?.some((ta) => ta.agent_id === filters.agentId);
-        if (!assignedViaJunction && t.agent_id !== filters.agentId) return false;
+        if (!assignedViaJunction && t.agentId !== filters.agentId) return false;
       }
       return true;
     });

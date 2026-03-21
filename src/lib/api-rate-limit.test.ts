@@ -1,39 +1,28 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
-import { createMockSupabaseClient, mockReject } from "@/__tests__/mocks/supabase";
+import { createMockDb } from "@/__tests__/mocks/drizzle";
 
-// ---------------------------------------------------------------------------
-// Mocks
-// ---------------------------------------------------------------------------
-
-const mockAgent = {
-  id: "agent-001",
-  workspace_id: "ws-001",
-  name: "test-agent",
-};
+const { mockDb, pushResult, pushError, reset } = createMockDb();
 
 vi.mock("@/lib/api-auth", () => ({
   authenticateAgent: vi.fn(),
 }));
 
-vi.mock("@/lib/supabase/admin", () => ({
-  createAdminClient: vi.fn(),
-}));
+vi.mock("@/lib/db/client", () => ({ getDb: () => mockDb }));
 
 vi.mock("@/lib/rate-limiter", () => ({
   checkAndRecordRequest: vi.fn(),
 }));
 
 import { authenticateAgent } from "@/lib/api-auth";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { checkAndRecordRequest } from "@/lib/rate-limiter";
 import { withRateLimit, resetQuotaCache } from "./api-rate-limit";
 
-// ---------------------------------------------------------------------------
-// Setup
-// ---------------------------------------------------------------------------
-
-let mockSupabase: ReturnType<typeof createMockSupabaseClient>;
+const mockAgent = {
+  id: "agent-001",
+  workspaceId: "ws-001",
+  name: "test-agent",
+};
 
 const dummyHandler = vi.fn(async () => {
   return NextResponse.json({ ok: true });
@@ -41,13 +30,13 @@ const dummyHandler = vi.fn(async () => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  reset();
   resetQuotaCache();
-  mockSupabase = createMockSupabaseClient();
-  (createAdminClient as ReturnType<typeof vi.fn>).mockReturnValue(mockSupabase.client);
   (authenticateAgent as ReturnType<typeof vi.fn>).mockResolvedValue(mockAgent);
 
-  // Default: quota lookup returns no agent-specific or workspace quota (use defaults)
-  mockReject(mockSupabase.chain, { message: "not found", code: "PGRST116" });
+  // Default: no agent-specific or workspace quota found (empty results -> use defaults)
+  // The getQuota function does 2 selects: agent-specific then workspace-default
+  // When both return empty, it falls back to hardcoded defaults
 });
 
 function makeRequest() {
@@ -57,12 +46,12 @@ function makeRequest() {
   });
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 describe("withRateLimit", () => {
   it("returns 429 when minute limit is exceeded", async () => {
+    // getQuota does up to 2 selects, but we push empty to trigger defaults
+    pushResult([]);
+    pushResult([]);
+
     (checkAndRecordRequest as ReturnType<typeof vi.fn>).mockResolvedValue({
       allowed: false,
       currentCount: 61,
@@ -82,6 +71,9 @@ describe("withRateLimit", () => {
   });
 
   it("returns 429 when hour limit is exceeded", async () => {
+    pushResult([]);
+    pushResult([]);
+
     (checkAndRecordRequest as ReturnType<typeof vi.fn>)
       .mockResolvedValueOnce({
         allowed: true,
@@ -106,6 +98,9 @@ describe("withRateLimit", () => {
   });
 
   it("passes through to handler when rate limit allows", async () => {
+    pushResult([]);
+    pushResult([]);
+
     (checkAndRecordRequest as ReturnType<typeof vi.fn>).mockResolvedValue({
       allowed: true,
       currentCount: 5,
@@ -122,6 +117,9 @@ describe("withRateLimit", () => {
   });
 
   it("sets rate limit headers on successful responses", async () => {
+    pushResult([]);
+    pushResult([]);
+
     (checkAndRecordRequest as ReturnType<typeof vi.fn>).mockResolvedValue({
       allowed: true,
       currentCount: 10,
@@ -136,6 +134,9 @@ describe("withRateLimit", () => {
   });
 
   it("fails open when rate limiter errors", async () => {
+    pushResult([]);
+    pushResult([]);
+
     // checkAndRecordRequest itself handles errors and returns allowed=true
     (checkAndRecordRequest as ReturnType<typeof vi.fn>).mockResolvedValue({
       allowed: true,

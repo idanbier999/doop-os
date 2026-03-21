@@ -38,13 +38,13 @@ export function StatusHeader({ agent }: StatusHeaderProps) {
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <Badge variant="stage" value={agent.stage} />
         <Badge variant="health" value={agent.health} />
-        {agent.agent_type && (
+        {agent.agentType && (
           <span className="rounded-full bg-mac-white px-2.5 py-0.5 text-xs font-medium text-mac-dark-gray">
-            {agent.agent_type}
+            {agent.agentType}
           </span>
         )}
         <span className="text-xs text-mac-dark-gray">
-          Last seen: {relativeTime(agent.last_seen_at)}
+          Last seen: {relativeTime(agent.lastSeenAt)}
         </span>
       </div>
     </div>

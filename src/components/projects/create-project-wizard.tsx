@@ -7,9 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FileUpload, type UploadedFile } from "@/components/ui/file-upload";
 import { useWorkspace } from "@/contexts/workspace-context";
-import { useSupabase } from "@/hooks/use-supabase";
 import { useNotifications } from "@/contexts/notification-context";
-import { createProject } from "@/app/dashboard/projects/actions";
+import { createProject, addProjectFile } from "@/app/dashboard/projects/actions";
 
 interface Agent {
   id: string;
@@ -88,7 +87,6 @@ function StepIndicator({ currentStep }: { currentStep: number }) {
 export function CreateProjectWizard({ open, onClose, agents }: CreateProjectWizardProps) {
   const router = useRouter();
   const { workspaceId } = useWorkspace();
-  const supabase = useSupabase();
   const { addToast } = useNotifications();
 
   // Step state
@@ -201,20 +199,18 @@ export function CreateProjectWizard({ open, onClose, agents }: CreateProjectWiza
 
       const projectId = result.projectId!;
 
-      // Insert project_files records for uploaded files
+      // Insert project_files records for uploaded files via server action
       if (uploadedFiles.length > 0) {
-        const fileRows = uploadedFiles
-          .filter((f) => f.status === "complete")
-          .map((f) => ({
-            project_id: projectId,
-            file_name: f.name,
-            file_path: f.path,
-            file_size: f.size,
-            mime_type: f.type || null,
-          }));
-
-        if (fileRows.length > 0) {
-          await supabase.from("project_files").insert(fileRows);
+        const completedFiles = uploadedFiles.filter((f) => f.status === "complete");
+        for (const f of completedFiles) {
+          await addProjectFile({
+            projectId,
+            workspaceId,
+            fileName: f.name,
+            filePath: f.path,
+            fileSize: f.size,
+            mimeType: f.type || undefined,
+          });
         }
       }
 

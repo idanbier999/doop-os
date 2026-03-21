@@ -1,12 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
-import {
-  createMockSupabaseClient,
-  createTableMocks,
-  mockResolve,
-  mockReject,
-  MockSupabaseChain,
-} from "@/__tests__/mocks/supabase";
+import { createMockDb } from "@/__tests__/mocks/drizzle";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -14,16 +8,18 @@ import {
 
 const mockAgent = {
   id: "agent-001",
-  workspace_id: "ws-001",
+  workspaceId: "ws-001",
   name: "test-agent",
 };
+
+const { mockDb, pushResult, pushError, reset } = createMockDb();
 
 vi.mock("@/lib/api-auth", () => ({
   authenticateAgent: vi.fn(),
 }));
 
-vi.mock("@/lib/supabase/admin", () => ({
-  createAdminClient: vi.fn(),
+vi.mock("@/lib/db/client", () => ({
+  getDb: () => mockDb,
 }));
 
 vi.mock("@/lib/api-rate-limit", () => ({
@@ -31,25 +27,15 @@ vi.mock("@/lib/api-rate-limit", () => ({
 }));
 
 import { authenticateAgent } from "@/lib/api-auth";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { POST } from "./route";
 
 // ---------------------------------------------------------------------------
 // Setup
 // ---------------------------------------------------------------------------
 
-let mockSupabase: ReturnType<typeof createMockSupabaseClient>;
-let problemsChain: MockSupabaseChain;
-let tasksChain: MockSupabaseChain;
-let activityChain: MockSupabaseChain;
-
 beforeEach(() => {
   vi.clearAllMocks();
-  mockSupabase = createMockSupabaseClient();
-  problemsChain = createMockSupabaseClient().chain;
-  tasksChain = createMockSupabaseClient().chain;
-  activityChain = createMockSupabaseClient().chain;
-  (createAdminClient as ReturnType<typeof vi.fn>).mockReturnValue(mockSupabase.client);
+  reset();
   (authenticateAgent as ReturnType<typeof vi.fn>).mockResolvedValue(mockAgent);
 });
 
@@ -104,11 +90,10 @@ describe("POST /api/v1/problems", () => {
   });
 
   it("returns 201 with problem_id for valid request", async () => {
-    mockResolve(problemsChain, { id: "prob-001", severity: "high" });
-    createTableMocks(mockSupabase.from, {
-      problems: problemsChain,
-      activity_log: activityChain,
-    });
+    // db.insert(problems).returning() → problem row
+    pushResult([{ id: "prob-001", severity: "high" }]);
+    // db.insert(activityLog) → activity log
+    pushResult([]);
 
     const request = new NextRequest("http://localhost/api/v1/problems", {
       method: "POST",
@@ -125,12 +110,8 @@ describe("POST /api/v1/problems", () => {
   });
 
   it("returns 404 when task_id does not exist", async () => {
-    mockResolve(tasksChain, null);
-    // Make .single() return error for not found
-    mockReject(tasksChain, { message: "not found", code: "PGRST116" });
-    createTableMocks(mockSupabase.from, {
-      tasks: tasksChain,
-    });
+    // db.select from tasks → empty array (task not found)
+    pushResult([]);
 
     const request = new NextRequest("http://localhost/api/v1/problems", {
       method: "POST",

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useSupabase } from "@/hooks/use-supabase";
 import { useWorkspace } from "@/contexts/workspace-context";
 import { Button } from "@/components/ui/button";
 
@@ -15,23 +14,24 @@ interface ProblemActionsProps {
 export function ProblemActions({ problemId, status, agentId, problemTitle }: ProblemActionsProps) {
   const [loading, setLoading] = useState(false);
   const { userId, workspaceId } = useWorkspace();
-  const supabase = useSupabase();
 
   const updateStatus = async (newStatus: string) => {
     setLoading(true);
-    const updateData: Record<string, string> = { status: newStatus };
-    if (newStatus === "resolved" || newStatus === "dismissed") {
-      updateData.resolved_by = userId;
-      updateData.resolved_at = new Date().toISOString();
+    try {
+      await fetch(`/api/internal/problems/${problemId}/status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: newStatus,
+          userId,
+          workspaceId,
+          agentId,
+          problemTitle,
+        }),
+      });
+    } catch {
+      // silently fail
     }
-    await supabase.from("problems").update(updateData).eq("id", problemId);
-    await supabase.from("activity_log").insert({
-      workspace_id: workspaceId,
-      agent_id: agentId,
-      user_id: userId,
-      action: `problem_${newStatus}`,
-      details: { problem_id: problemId, title: problemTitle },
-    });
     setLoading(false);
   };
 

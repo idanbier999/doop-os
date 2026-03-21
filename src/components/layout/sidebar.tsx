@@ -3,25 +3,24 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { authClient } from "@/lib/auth-client";
 import { useMobileSidebar } from "@/contexts/mobile-sidebar-context";
 
 const navItems = [
-  { label: "Fleet", href: "/dashboard", icon: "▣" },
-  { label: "Agents", href: "/dashboard/agents", icon: "◆" },
-  { label: "Audit Trail", href: "/dashboard/activity", icon: "◷" },
-  { label: "Problems", href: "/dashboard/problems", icon: "⚠" },
-  { label: "Projects", href: "/dashboard/projects", icon: "◈" },
-  { label: "API Docs", href: "/dashboard/docs", icon: "◎" },
-  { label: "Settings", href: "/dashboard/settings", icon: "⚙" },
+  { label: "Fleet", href: "/dashboard", icon: "\u25A3" },
+  { label: "Agents", href: "/dashboard/agents", icon: "\u25C6" },
+  { label: "Audit Trail", href: "/dashboard/activity", icon: "\u25F7" },
+  { label: "Problems", href: "/dashboard/problems", icon: "\u26A0" },
+  { label: "Projects", href: "/dashboard/projects", icon: "\u25C8" },
+  { label: "API Docs", href: "/dashboard/docs", icon: "\u25CE" },
+  { label: "Settings", href: "/dashboard/settings", icon: "\u2699" },
 ];
 
 interface SidebarProps {
-  userEmail: string;
+  userName: string;
   workspaceName: string;
 }
 
-export function Sidebar({ userEmail, workspaceName }: SidebarProps) {
+export function Sidebar({ userName, workspaceName }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { isOpen, close } = useMobileSidebar();
@@ -37,7 +36,7 @@ export function Sidebar({ userEmail, workspaceName }: SidebarProps) {
   };
 
   const handleLogout = async () => {
-    await authClient.signOut();
+    await fetch("/api/auth/logout", { method: "POST" });
     router.push("/login");
   };
 
@@ -94,13 +93,13 @@ export function Sidebar({ userEmail, workspaceName }: SidebarProps) {
         {/* Footer */}
         <div className="px-2 py-3 border-t border-mac-border space-y-1">
           <p className="px-3 text-[11px] text-mac-dark-gray truncate font-[family-name:var(--font-pixel)]">
-            {userEmail}
+            {userName}
           </p>
           <button
             onClick={handleLogout}
             className="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-mac-black hover:bg-mac-highlight-soft transition-colors duration-150 font-[family-name:var(--font-pixel)]"
           >
-            <span className="text-base leading-none">⊳</span>
+            <span className="text-base leading-none">{"\u22B3"}</span>
             Sign out
           </button>
         </div>

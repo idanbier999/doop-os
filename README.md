@@ -89,13 +89,13 @@ Every action in Doop is logged: agent registered, task assigned, project launche
 
 Categories tracked: agent lifecycle, project lifecycle, task lifecycle, invitations, authentication events, team changes, and audit trail entries.
 
-### Real-Time Everything
+### Real-Time Updates
 
-Doop uses Supabase Realtime subscriptions so you never need to refresh:
+Doop uses polling and server-sent events so you never need to refresh:
 
-- **Agent health** — status changes appear instantly across all views
+- **Agent health** — status changes appear across all views
 - **Task board** — Kanban updates as tasks move between stages
-- **Problems** — new incidents surface immediately with toast notifications
+- **Problems** — new incidents surface with toast notifications
 - **Activity feed** — entries appear as they're created
 - **Agent timeline** — updates stream into the detail page
 
@@ -109,7 +109,7 @@ Create multiple workspaces. Invite team members via unique token links. Three ro
 | **Admin**  | Manage team, invite members, configure agents and settings |
 | **Member** | View resources, manage own agents                          |
 
-All data is workspace-scoped. 63 row-level security policies across 23 tables enforce isolation at the database level.
+All data is workspace-scoped with access control enforced in application code.
 
 ### Slack Notifications
 
@@ -135,7 +135,7 @@ Agents integrate through a REST API or the MCP server:
 | `/api/v1/tasks/:id/complete` | POST   | Mark task completed with optional result payload            |
 | `/api/v1/tasks/:id/comments` | POST   | Add comment to task                                         |
 | `/api/v1/tasks/:id/assign`   | POST   | Assign agent to task (lead only)                            |
-| `/api/v1/projects/:id`       | GET    | Get project with team, files (signed URLs)                  |
+| `/api/v1/projects/:id`       | GET    | Get project with team, files                                |
 | `/api/v1/projects/:id/tasks` | POST   | Create subtask (lead only)                                  |
 | `/api/v1/problems`           | POST   | Report a problem/incident                                   |
 | `/api/v1/activity-log`       | POST   | Log custom activity entry                                   |
@@ -144,11 +144,11 @@ Authenticate with `Authorization: Bearer <api-key>`. Rate-limited per agent.
 
 **MCP** — native integration for Claude Code / Cursor:
 
-Configure `DOOP_API_URL` and `DOOP_API_KEY` in your `.mcp.json`. The MCP server wraps the REST API — no Supabase credentials needed on the client.
+Configure `DOOP_API_URL` and `DOOP_API_KEY` in your `.mcp.json`. The MCP server wraps the REST API.
 
 ### File Attachments
 
-Attach files to projects with drag-and-drop upload. Documents, images, code — whatever context your agents or team needs. Stored in Supabase Storage with download links and metadata.
+Attach files to projects with drag-and-drop upload. Documents, images, code — whatever context your agents or team needs. Stored locally with download links and metadata.
 
 ### Search & Command Palette
 
@@ -158,17 +158,18 @@ Hit `Cmd+K` (or `Ctrl+K`) to search across your workspace — agents, projects, 
 
 ## Tech Stack
 
-| Layer      | Technology                                 |
-| ---------- | ------------------------------------------ |
-| Framework  | Next.js 16 (App Router)                    |
-| UI         | React 19, Tailwind CSS 4                   |
-| Auth       | Better Auth (email/password, Google OAuth) |
-| Database   | Supabase (PostgreSQL + Realtime)           |
-| Storage    | Supabase Storage                           |
-| Charts     | Recharts                                   |
-| Validation | Zod                                        |
-| Testing    | Vitest, Testing Library                    |
-| Language   | TypeScript                                 |
+| Layer      | Technology                                           |
+| ---------- | ---------------------------------------------------- |
+| Framework  | Next.js 16 (App Router)                              |
+| UI         | React 19, Tailwind CSS 4                             |
+| Auth       | Custom sessions (cookie-based)                       |
+| Database   | PostgreSQL (embedded for dev, any Postgres for prod) |
+| ORM        | Drizzle                                              |
+| Storage    | Local file storage                                   |
+| Charts     | Recharts                                             |
+| Validation | Zod                                                  |
+| Testing    | Vitest, Testing Library                              |
+| Language   | TypeScript                                           |
 
 ---
 
@@ -180,7 +181,7 @@ cd my-app
 npm run dev
 ```
 
-That's it. The CLI clones the repo, installs dependencies, and — if Docker + Supabase CLI are available — starts a local Supabase and wires up `.env.local` automatically.
+That's it. The CLI clones the repo and installs dependencies. The dev server auto-starts an embedded PostgreSQL database, runs migrations, and seeds data — no Docker, no external database, no environment variables needed.
 
 Open [http://localhost:3000](http://localhost:3000).
 
@@ -197,48 +198,29 @@ Open [http://localhost:3000](http://localhost:3000).
    npm install
    ```
 
-2. **Set up environment variables:**
-
-   ```bash
-   cp .env.example .env.local
-   ```
-
-   Fill in the values — see `.env.example` for details on each variable.
-
-3. **Set up the database:**
-
-   **Option A — Local Supabase (recommended for development):**
-
-   Requires [Docker](https://www.docker.com/) to be running.
-
-   ```bash
-   supabase start
-   ```
-
-   Migrations apply automatically. The CLI prints local credentials — use them in `.env.local`.
-
-   **Option B — Remote Supabase (recommended for production):**
-
-   Create a Supabase project at [supabase.com](https://supabase.com), then:
-
-   ```bash
-   supabase link --project-ref <your-project-ref>
-   supabase db push
-   ```
-
-4. **Start the development server:**
+2. **Start the development server:**
 
    ```bash
    npm run dev
    ```
 
+   The dev server automatically starts an embedded PostgreSQL instance, runs all migrations, and seeds initial data. No manual database setup required.
+
    Open [http://localhost:3000](http://localhost:3000).
+
+3. **(Optional) Use an external PostgreSQL database:**
+
+   Set the `DATABASE_URL` environment variable to point to your Postgres instance:
+
+   ```bash
+   DATABASE_URL=postgresql://user:pass@host:5432/doop npm run dev
+   ```
 
 </details>
 
 ## First Login
 
-1. **Sign up** with email/password or Google OAuth.
+1. **Enter a username** — the app auto-creates your user account.
 2. **Create a workspace** — the onboarding wizard walks you through it.
 3. **Register your first agent** — pick a platform, get an API key, paste the config snippet.
 4. You'll land on the **fleet dashboard** showing your agents, recent activity, and task pipeline.
@@ -265,17 +247,19 @@ src/
   app/                  # Next.js App Router pages and API routes
     api/                # REST API (auth, v1 agent/task endpoints)
     dashboard/          # Authenticated dashboard pages
-    login/, signup/     # Authentication pages
+    login/              # Authentication page
     onboarding/         # New user workspace setup
   components/           # React components by feature area
     ui/                 # Reusable UI primitives
   contexts/             # React contexts (workspace, notifications)
-  hooks/                # Custom hooks (Supabase, realtime)
+  hooks/                # Custom hooks (polling, realtime)
   lib/                  # Utilities and business logic
-    supabase/           # Supabase client factories
-supabase/
-  migrations/           # Database migrations (run via supabase db push)
-  config.toml           # Local Supabase configuration
+    db/                 # Database client, schema, queries
+    auth/               # Session management
+drizzle/
+  migrations/           # Database migrations (Drizzle Kit)
+scripts/
+  dev.mjs               # Dev server orchestrator (embedded-postgres + Next.js)
 packages/
   create-doop/          # npx create-doop CLI scaffolding tool
 ```

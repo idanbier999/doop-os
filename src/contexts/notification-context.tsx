@@ -1,7 +1,7 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { useSupabase } from "@/hooks/use-supabase";
+import { createContext, useCallback, useContext, useRef, useState } from "react";
+import { useRealtimeEvents } from "@/hooks/use-realtime-events";
 import { useWorkspace } from "@/contexts/workspace-context";
 import { ToastContainer, type ToastData } from "@/components/ui/toast";
 
@@ -34,145 +34,91 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  const supabase = useSupabase();
-
   // Helper: check fleet scope ownership
   function isOwnedByUser(ownerId: string | null | undefined): boolean {
     if (fleetScope === "all") return true;
     return ownerId === userId;
   }
 
-  // Channel 1: New problems
-  useEffect(() => {
-    const channel = supabase
-      .channel("toast-problems")
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "problems",
-        },
-        async (payload) => {
-          const problem = payload.new as {
+  // Listen to problems — toast on high/critical severity
+  useRealtimeEvents({
+    table: "problems",
+    onEvent: (event) => {
+      if (event.event !== "INSERT") return;
+      const problem = event.new as
+        | {
             severity: string;
             title: string;
             agent_id: string;
-          };
-
-          if (problem.severity !== "high" && problem.severity !== "critical") {
-            return;
           }
+        | undefined;
+      if (!problem) return;
+      if (problem.severity !== "high" && problem.severity !== "critical") return;
 
-          const { data: agent } = await supabase
-            .from("agents")
-            .select("name, workspace_id, owner_id")
-            .eq("id", problem.agent_id)
-            .single();
+      addToast({
+        type: problem.severity === "critical" ? "critical" : "warning",
+        title: `Problem: ${problem.title}`,
+        description: "New problem reported",
+      });
+    },
+  });
 
-          if (!agent || agent.workspace_id !== workspaceId) return;
-          if (!isOwnedByUser(agent.owner_id)) return;
-
-          addToast({
-            type: problem.severity === "critical" ? "critical" : "warning",
-            title: `Problem: ${problem.title}`,
-            description: `Reported by ${agent.name || "Unknown agent"}`,
-          });
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [supabase, workspaceId, userId, fleetScope, addToast]);
-
-  // Channel 2: Agent offline transitions
-  useEffect(() => {
-    const channel = supabase
-      .channel("toast-agent-offline")
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "agents",
-        },
-        async (payload) => {
-          const agent = payload.new as {
-            workspace_id: string;
+  // Listen to agents — toast on offline transitions
+  useRealtimeEvents({
+    table: "agents",
+    onEvent: (event) => {
+      if (event.event !== "UPDATE") return;
+      const agent = event.new as
+        | {
+            workspace_id?: string;
+            workspaceId?: string;
             health: string;
             name: string;
-            owner_id: string | null;
-          };
-          const old = payload.old as { health?: string };
+            owner_id?: string | null;
+            ownerId?: string | null;
+          }
+        | undefined;
+      const old = event.old as { health?: string } | undefined;
 
-          if (agent.workspace_id !== workspaceId) return;
-          if (agent.health !== "offline") return;
-          if (old.health === "offline") return;
-          if (!isOwnedByUser(agent.owner_id)) return;
+      if (!agent) return;
+      if (agent.health !== "offline") return;
+      if (old?.health === "offline") return;
+      if (!isOwnedByUser(agent.owner_id ?? agent.ownerId)) return;
 
-          addToast({
-            type: "warning",
-            title: `Agent offline: ${agent.name}`,
-            description: "No heartbeat received",
-          });
-        }
-      )
-      .subscribe();
+      addToast({
+        type: "warning",
+        title: `Agent offline: ${agent.name}`,
+        description: "No heartbeat received",
+      });
+    },
+  });
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [supabase, workspaceId, userId, fleetScope, addToast]);
-
-  // Channel 3: Task cancellations
-  useEffect(() => {
-    const channel = supabase
-      .channel("toast-task-failure")
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "tasks",
-        },
-        async (payload) => {
-          const task = payload.new as {
-            workspace_id: string;
+  // Listen to tasks — toast on cancellations
+  useRealtimeEvents({
+    table: "tasks",
+    onEvent: (event) => {
+      if (event.event !== "UPDATE") return;
+      const task = event.new as
+        | {
+            workspace_id?: string;
+            workspaceId?: string;
             status: string;
-            agent_id: string | null;
             title: string;
-          };
+            agent_id?: string | null;
+          }
+        | undefined;
 
-          if (task.workspace_id !== workspaceId) return;
-          if (task.status !== "cancelled") return;
-          if (!task.agent_id) return;
+      if (!task) return;
+      if (task.status !== "cancelled") return;
+      if (!task.agent_id) return;
 
-          const { data: agent } = await supabase
-            .from("agents")
-            .select("name, owner_id")
-            .eq("id", task.agent_id)
-            .single();
-
-          if (!isOwnedByUser(agent?.owner_id)) return;
-
-          addToast({
-            type: "critical",
-            title: `Task cancelled: ${task.title}`,
-            description: `Agent: ${agent?.name || "Unknown"}`,
-          });
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [supabase, workspaceId, userId, fleetScope, addToast]);
+      addToast({
+        type: "critical",
+        title: `Task cancelled: ${task.title}`,
+        description: "Task was cancelled",
+      });
+    },
+  });
 
   return (
     <NotificationContext.Provider value={{ addToast, dismissToast }}>

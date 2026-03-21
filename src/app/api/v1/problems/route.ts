@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { authenticateAgent } from "@/lib/api-auth";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { getDb } from "@/lib/db/client";
+import { tasks, problems, activityLog } from "@/lib/db/schema";
+import { eq, and } from "drizzle-orm";
 import { withRateLimit } from "@/lib/api-rate-limit";
-import type { Json } from "@/lib/database.types";
 
 const problemBodySchema = z
   .object({
@@ -36,48 +37,56 @@ async function handlePost(request: NextRequest) {
   }
 
   const { title, description, severity, task_id } = parsed.data;
-  const supabase = createAdminClient();
+  const db = getDb();
 
   // If task_id provided, verify it exists in the agent's workspace
   if (task_id) {
-    const { data: task, error: taskError } = await supabase
-      .from("tasks")
-      .select("id")
-      .eq("id", task_id)
-      .eq("workspace_id", agent.workspace_id)
-      .single();
+    const taskRows = await db
+      .select({ id: tasks.id })
+      .from(tasks)
+      .where(and(eq(tasks.id, task_id), eq(tasks.workspaceId, agent.workspaceId)))
+      .limit(1);
 
-    if (taskError || !task) {
+    if (taskRows.length === 0) {
       return NextResponse.json({ error: "Task not found" }, { status: 404 });
     }
   }
 
-  const { data: problem, error: insertError } = await supabase
-    .from("problems")
-    .insert({
-      agent_id: agent.id,
-      title,
-      description: description ?? null,
-      severity: severity ?? "medium",
-      task_id: task_id ?? null,
-    })
-    .select("id, severity")
-    .single();
+  let problem;
+  try {
+    const result = await db
+      .insert(problems)
+      .values({
+        agentId: agent.id,
+        title,
+        description: description ?? null,
+        severity: severity ?? "medium",
+        taskId: task_id ?? null,
+      })
+      .returning({
+        id: problems.id,
+        severity: problems.severity,
+      });
 
-  if (insertError || !problem) {
+    problem = result[0];
+  } catch {
     return NextResponse.json({ error: "Failed to report problem" }, { status: 500 });
   }
 
-  await supabase.from("activity_log").insert({
-    workspace_id: agent.workspace_id,
-    agent_id: agent.id,
+  if (!problem) {
+    return NextResponse.json({ error: "Failed to report problem" }, { status: 500 });
+  }
+
+  await db.insert(activityLog).values({
+    workspaceId: agent.workspaceId,
+    agentId: agent.id,
     action: "problem_reported",
     details: {
       problem_id: problem.id,
       title,
       severity: problem.severity,
       task_id: task_id ?? null,
-    } as unknown as Json,
+    },
   });
 
   return NextResponse.json({ problem_id: problem.id, severity: problem.severity }, { status: 201 });

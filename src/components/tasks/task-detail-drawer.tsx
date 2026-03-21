@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { useSupabase } from "@/hooks/use-supabase";
 import { useWorkspace } from "@/contexts/workspace-context";
 import { useNotifications } from "@/contexts/notification-context";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +13,7 @@ import { TaskProblems } from "./task-problems";
 import { TaskResultViewer } from "./task-result-viewer";
 import { TaskActivity } from "./task-activity";
 import { relativeTime } from "@/lib/utils";
+import { updateTask, updateTaskAgents } from "@/app/dashboard/tasks/actions";
 import type { TaskWithAgents } from "@/lib/types";
 
 interface TaskDetailDrawerProps {
@@ -51,9 +51,8 @@ const tabs: { key: Tab; label: string }[] = [
 export function TaskDetailDrawer({ task, open, onClose, agents }: TaskDetailDrawerProps) {
   const [activeTab, setActiveTab] = useState<Tab>("comments");
   const [updating, setUpdating] = useState(false);
-  const { workspaceId, userId } = useWorkspace();
+  const { workspaceId } = useWorkspace();
   const { addToast } = useNotifications();
-  const supabase = useSupabase();
   const router = useRouter();
 
   useEffect(() => {
@@ -75,24 +74,12 @@ export function TaskDetailDrawer({ task, open, onClose, agents }: TaskDetailDraw
       if (!task) return;
       setUpdating(true);
       try {
-        const oldStatus = task.status;
-        const { error } = await supabase
-          .from("tasks")
-          .update({ status: newStatus })
-          .eq("id", task.id);
-        if (error) throw error;
-        await supabase.from("activity_log").insert({
-          workspace_id: workspaceId,
-          agent_id: null,
-          user_id: userId,
-          action: "task_updated",
-          details: {
-            task_id: task.id,
-            field: "status",
-            old_value: oldStatus,
-            new_value: newStatus,
-          },
+        const result = await updateTask({
+          taskId: task.id,
+          workspaceId,
+          status: newStatus,
         });
+        if (!result.success) throw new Error(result.error);
         router.refresh();
       } catch {
         addToast({
@@ -104,7 +91,7 @@ export function TaskDetailDrawer({ task, open, onClose, agents }: TaskDetailDraw
         setUpdating(false);
       }
     },
-    [task, workspaceId, userId, addToast, supabase, router]
+    [task, workspaceId, addToast, router]
   );
 
   const handlePriorityChange = useCallback(
@@ -112,24 +99,12 @@ export function TaskDetailDrawer({ task, open, onClose, agents }: TaskDetailDraw
       if (!task) return;
       setUpdating(true);
       try {
-        const oldPriority = task.priority;
-        const { error } = await supabase
-          .from("tasks")
-          .update({ priority: newPriority })
-          .eq("id", task.id);
-        if (error) throw error;
-        await supabase.from("activity_log").insert({
-          workspace_id: workspaceId,
-          agent_id: null,
-          user_id: userId,
-          action: "task_updated",
-          details: {
-            task_id: task.id,
-            field: "priority",
-            old_value: oldPriority,
-            new_value: newPriority,
-          },
+        const result = await updateTask({
+          taskId: task.id,
+          workspaceId,
+          priority: newPriority,
         });
+        if (!result.success) throw new Error(result.error);
         router.refresh();
       } catch {
         addToast({
@@ -141,7 +116,7 @@ export function TaskDetailDrawer({ task, open, onClose, agents }: TaskDetailDraw
         setUpdating(false);
       }
     },
-    [task, workspaceId, userId, addToast, supabase, router]
+    [task, workspaceId, addToast, router]
   );
 
   const handleAgentsChange = useCallback(
@@ -154,84 +129,19 @@ export function TaskDetailDrawer({ task, open, onClose, agents }: TaskDetailDraw
           role: ta.role as "primary" | "helper",
         }));
 
-        const currentIds = new Set(currentAssignments.map((a) => a.agent_id));
-        const newIds = new Set(newAssignments.map((a) => a.agent_id));
-
-        // Determine removed agents
-        const removed = currentAssignments.filter((a) => !newIds.has(a.agent_id));
-        // Determine added agents
-        const added = newAssignments.filter((a) => !currentIds.has(a.agent_id));
-        // Determine role changes (agents that exist in both but role changed)
-        const roleChanges = newAssignments.filter((a) => {
-          const cur = currentAssignments.find((c) => c.agent_id === a.agent_id);
-          return cur && cur.role !== a.role;
+        const result = await updateTaskAgents({
+          taskId: task.id,
+          workspaceId,
+          assignments: newAssignments.map((a) => ({
+            agent_id: a.agent_id,
+            role: a.role,
+          })),
+          currentAssignments: currentAssignments.map((a) => ({
+            agent_id: a.agent_id,
+            role: a.role,
+          })),
         });
-
-        // Delete removed
-        for (const r of removed) {
-          const { error: delErr } = await supabase
-            .from("task_agents")
-            .delete()
-            .eq("task_id", task.id)
-            .eq("agent_id", r.agent_id);
-          if (delErr) throw delErr;
-        }
-
-        // Demote old primary before promoting new one (partial unique index)
-        const oldPrimary = currentAssignments.find((a) => a.role === "primary");
-        const newPrimary = newAssignments.find((a) => a.role === "primary");
-        if (oldPrimary && newPrimary && oldPrimary.agent_id !== newPrimary.agent_id) {
-          // Only demote if old primary is still in the list
-          if (newIds.has(oldPrimary.agent_id)) {
-            const { error: demoteErr } = await supabase
-              .from("task_agents")
-              .update({ role: "helper" })
-              .eq("task_id", task.id)
-              .eq("agent_id", oldPrimary.agent_id);
-            if (demoteErr) throw demoteErr;
-          }
-        }
-
-        // Insert added
-        for (const a of added) {
-          const { error: insErr } = await supabase
-            .from("task_agents")
-            .insert({ task_id: task.id, agent_id: a.agent_id, role: a.role });
-          if (insErr) throw insErr;
-        }
-
-        // Update role changes (excluding the demotion we already handled)
-        for (const rc of roleChanges) {
-          if (oldPrimary && rc.agent_id === oldPrimary.agent_id && rc.role === "helper") continue; // already handled
-          const { error: updErr } = await supabase
-            .from("task_agents")
-            .update({ role: rc.role })
-            .eq("task_id", task.id)
-            .eq("agent_id", rc.agent_id);
-          if (updErr) throw updErr;
-        }
-
-        // Also update tasks.agent_id for backward compat (trigger handles this, but let's be safe for immediate UI)
-        const primaryAgent = newAssignments.find((a) => a.role === "primary");
-        await supabase
-          .from("tasks")
-          .update({ agent_id: primaryAgent?.agent_id ?? null })
-          .eq("id", task.id);
-
-        // Log activity
-        await supabase.from("activity_log").insert({
-          workspace_id: workspaceId,
-          agent_id: null,
-          user_id: userId,
-          action: "task_updated",
-          details: {
-            task_id: task.id,
-            field: "agents",
-            added: added.map((a) => a.agent_id),
-            removed: removed.map((a) => a.agent_id),
-            role_changes: roleChanges.map((a) => ({ agent_id: a.agent_id, role: a.role })),
-          },
-        });
+        if (!result.success) throw new Error(result.error);
         router.refresh();
       } catch {
         addToast({
@@ -243,7 +153,7 @@ export function TaskDetailDrawer({ task, open, onClose, agents }: TaskDetailDraw
         setUpdating(false);
       }
     },
-    [task, workspaceId, userId, addToast, supabase, router]
+    [task, workspaceId, addToast, router]
   );
 
   return (
@@ -282,7 +192,7 @@ export function TaskDetailDrawer({ task, open, onClose, agents }: TaskDetailDraw
                   ? `Agents: ${task.task_agents.map((ta) => `${ta.agents?.name ?? "?"}${ta.role === "primary" ? " (primary)" : ""}`).join(", ")}`
                   : `Agent: ${task.agents?.name ?? "Unassigned"}`}
               </p>
-              <p className="text-xs text-mac-gray mt-1">Created: {relativeTime(task.created_at)}</p>
+              <p className="text-xs text-mac-gray mt-1">Created: {relativeTime(task.createdAt)}</p>
               {task.description && (
                 <div className="mt-3">
                   <p className="text-xs font-bold text-mac-dark-gray mb-1">Description:</p>
@@ -317,7 +227,11 @@ export function TaskDetailDrawer({ task, open, onClose, agents }: TaskDetailDraw
             <div className="flex-1 overflow-y-auto">
               {activeTab === "comments" && <TaskComments taskId={task.id} />}
               {activeTab === "problems" && <TaskProblems taskId={task.id} />}
-              {activeTab === "result" && <TaskResultViewer result={task.result} />}
+              {activeTab === "result" && (
+                <TaskResultViewer
+                  result={task.result as import("@/lib/database.types").Json | null}
+                />
+              )}
               {activeTab === "activity" && (
                 <TaskActivity taskId={task.id} workspaceId={workspaceId} />
               )}

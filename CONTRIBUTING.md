@@ -19,8 +19,8 @@ Before you begin, make sure you have the following installed:
 
 - **Node.js 20+** (see `.nvmrc` for the exact version)
 - **npm** (comes with Node.js)
-- **Supabase CLI** -- [install guide](https://supabase.com/docs/guides/cli/getting-started)
-- **Docker** (for local Supabase development)
+
+No Docker or external database required — the dev server starts an embedded PostgreSQL automatically.
 
 ## Getting Started
 
@@ -29,8 +29,8 @@ Before you begin, make sure you have the following installed:
 2. **Clone** your fork locally:
 
    ```bash
-   git clone https://github.com/<your-username>/doop-dashboard.git
-   cd doop-dashboard
+   git clone https://github.com/<your-username>/doop-os.git
+   cd doop-os
    ```
 
 3. **Install dependencies:**
@@ -39,62 +39,45 @@ Before you begin, make sure you have the following installed:
    npm install
    ```
 
-4. **Set up environment variables:**
-
-   ```bash
-   cp .env.example .env.local
-   ```
-
-   Fill in the required values in `.env.local`. See the comments in `.env.example` for guidance on where to obtain each value.
-
-5. **Set up the database:**
-
-   For local development (recommended):
-
-   ```bash
-   supabase start
-   ```
-
-   This starts a local Supabase instance and automatically applies all migrations from `supabase/migrations/`. The CLI output will show the local credentials to use in `.env.local`.
-
-   For remote Supabase:
-
-   ```bash
-   supabase link --project-ref <your-project-ref>
-   supabase db push
-   ```
-
-6. **Start the development server:**
+4. **Start the development server:**
 
    ```bash
    npm run dev
    ```
 
-   The app will be available at [http://localhost:3000](http://localhost:3000).
+   The dev server automatically starts an embedded PostgreSQL instance, runs all migrations, and seeds initial data. The app will be available at [http://localhost:3000](http://localhost:3000).
 
 ## Database
+
+Doop uses [Drizzle ORM](https://orm.drizzle.team/) with PostgreSQL. The schema is defined in `src/lib/db/schema.ts`.
 
 ### Creating a new migration
 
 When you need to change the database schema:
 
-```bash
-supabase migration new <descriptive-name>
-```
+1. Edit the schema in `src/lib/db/schema.ts`
+2. Generate a migration:
 
-This creates a new timestamped SQL file in `supabase/migrations/`. Write your DDL statements there.
+   ```bash
+   npx drizzle-kit generate
+   ```
+
+   This creates a new timestamped SQL file in `drizzle/`.
 
 ### Applying migrations
 
-- **Local:** `supabase db reset` re-creates the database and applies all migrations from scratch.
-- **Remote:** `supabase db push` applies pending migrations to the linked project.
-
-### Generating types
-
-After schema changes, regenerate the TypeScript types:
+Migrations are applied automatically when the dev server starts. To apply manually:
 
 ```bash
-supabase gen types typescript --local > src/lib/database.types.ts
+npx drizzle-kit migrate
+```
+
+### Using an external database
+
+To develop against an external PostgreSQL instance instead of the embedded one:
+
+```bash
+DATABASE_URL=postgresql://user:pass@host:5432/doop npm run dev
 ```
 
 ## Branch Naming

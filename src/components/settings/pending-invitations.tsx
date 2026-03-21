@@ -11,8 +11,8 @@ import { getPendingInvitations, revokeInvitation } from "@/app/dashboard/setting
 interface Invitation {
   id: string;
   role: string;
-  created_at: string | null;
-  expires_at: string;
+  created_at: Date | null;
+  expires_at: Date;
 }
 
 export function PendingInvitations() {

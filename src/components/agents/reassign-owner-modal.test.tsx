@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ReassignOwnerModal } from "@/components/agents/reassign-owner-modal";
@@ -11,19 +12,11 @@ vi.mock("next/navigation", () => ({
   })),
 }));
 
-const mockSupabase = {};
-vi.mock("@/hooks/use-supabase", () => ({
-  useSupabase: vi.fn(() => mockSupabase),
-}));
-
 const mockReassignAgentOwner = vi.fn();
+const mockGetWorkspaceMembers = vi.fn();
 vi.mock("@/app/dashboard/agents/actions", () => ({
   reassignAgentOwner: (...args: unknown[]) => mockReassignAgentOwner(...args),
-}));
-
-const mockGetWorkspaceMemberMap = vi.fn();
-vi.mock("@/lib/workspace-members", () => ({
-  getWorkspaceMemberMap: (...args: unknown[]) => mockGetWorkspaceMemberMap(...args),
+  getWorkspaceMembers: (...args: unknown[]) => mockGetWorkspaceMembers(...args),
 }));
 
 // Mock HTMLDialogElement methods not available in jsdom
@@ -49,8 +42,7 @@ const defaultProps = {
 describe("ReassignOwnerModal", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    const memberMap = new Map(members.map((m) => [m.userId, m]));
-    mockGetWorkspaceMemberMap.mockResolvedValue(memberMap);
+    mockGetWorkspaceMembers.mockResolvedValue({ success: true, members });
     mockReassignAgentOwner.mockResolvedValue({ success: true });
   });
 
@@ -58,7 +50,7 @@ describe("ReassignOwnerModal", () => {
     render(<ReassignOwnerModal {...defaultProps} />);
 
     await waitFor(() => {
-      expect(mockGetWorkspaceMemberMap).toHaveBeenCalled();
+      expect(mockGetWorkspaceMembers).toHaveBeenCalled();
     });
 
     const select = screen.getByLabelText("New Owner");
@@ -74,7 +66,7 @@ describe("ReassignOwnerModal", () => {
     render(<ReassignOwnerModal {...defaultProps} />);
 
     await waitFor(() => {
-      expect(mockGetWorkspaceMemberMap).toHaveBeenCalled();
+      expect(mockGetWorkspaceMembers).toHaveBeenCalled();
     });
 
     const select = screen.getByLabelText("New Owner", { exact: false });
@@ -92,7 +84,7 @@ describe("ReassignOwnerModal", () => {
     render(<ReassignOwnerModal {...defaultProps} />);
 
     await waitFor(() => {
-      expect(mockGetWorkspaceMemberMap).toHaveBeenCalled();
+      expect(mockGetWorkspaceMembers).toHaveBeenCalled();
     });
 
     const select = screen.getByLabelText("New Owner", { exact: false });
@@ -110,7 +102,7 @@ describe("ReassignOwnerModal", () => {
     render(<ReassignOwnerModal {...defaultProps} />);
 
     await waitFor(() => {
-      expect(mockGetWorkspaceMemberMap).toHaveBeenCalled();
+      expect(mockGetWorkspaceMembers).toHaveBeenCalled();
     });
 
     const select = screen.getByLabelText("New Owner");
@@ -125,7 +117,7 @@ describe("ReassignOwnerModal", () => {
     render(<ReassignOwnerModal {...defaultProps} onClose={onClose} />);
 
     await waitFor(() => {
-      expect(mockGetWorkspaceMemberMap).toHaveBeenCalled();
+      expect(mockGetWorkspaceMembers).toHaveBeenCalled();
     });
 
     const select = screen.getByLabelText("New Owner", { exact: false });

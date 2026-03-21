@@ -2,12 +2,11 @@
 
 import { useState, useMemo, useCallback } from "react";
 import { useWorkspace } from "@/contexts/workspace-context";
-import { useRealtime } from "@/hooks/use-realtime";
+import { useRealtimeEvents } from "@/hooks/use-realtime-events";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ProjectCard } from "@/components/projects/project-card";
 import { CreateProjectWizard } from "@/components/projects/create-project-wizard";
-import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 
 type ProjectRow = {
   id: string;
@@ -55,28 +54,27 @@ export function ProjectsPageClient({
   const [statusFilter, setStatusFilter] = useState("");
   const [wizardOpen, setWizardOpen] = useState(false);
 
-  const handleRealtimePayload = useCallback(
-    (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
-      if (payload.eventType === "INSERT") {
-        const newProject = payload.new as unknown as ProjectRow;
+  const handleRealtimeEvent = useCallback(
+    (event: { event: string; new?: Record<string, unknown>; old?: Record<string, unknown> }) => {
+      if (event.event === "INSERT") {
+        const newProject = event.new as unknown as ProjectRow;
         if (newProject.workspace_id === workspaceId) {
           setProjects((prev) => [newProject, ...prev]);
         }
-      } else if (payload.eventType === "UPDATE") {
-        const updated = payload.new as unknown as ProjectRow;
+      } else if (event.event === "UPDATE") {
+        const updated = event.new as unknown as ProjectRow;
         setProjects((prev) => prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p)));
-      } else if (payload.eventType === "DELETE") {
-        const deleted = payload.old as unknown as { id: string };
+      } else if (event.event === "DELETE") {
+        const deleted = event.old as unknown as { id: string };
         setProjects((prev) => prev.filter((p) => p.id !== deleted.id));
       }
     },
     [workspaceId]
   );
 
-  useRealtime({
+  useRealtimeEvents({
     table: "projects",
-    filter: `workspace_id=eq.${workspaceId}`,
-    onPayload: handleRealtimePayload,
+    onEvent: handleRealtimeEvent,
   });
 
   const taskStatsByProject = useMemo(() => {

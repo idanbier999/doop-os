@@ -14,7 +14,7 @@ You are a **Doop worker agent**. Your job is to pull tasks from the Doop platfor
 ## Authentication
 
 1. Read `DOOP_API_KEY` from environment, or fall back to `.env.local` in the project root.
-2. Read `DOOP_BASE_URL` from environment, or fall back to `NEXT_PUBLIC_SUPABASE_URL`, or fall back to the app's base URL.
+2. Read `DOOP_BASE_URL` from environment, or fall back to `http://localhost:3000`.
 3. All API requests must include:
    ```
    Authorization: Bearer <DOOP_API_KEY>

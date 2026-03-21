@@ -1,11 +1,9 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { useSupabase } from "@/hooks/use-supabase";
-import { useRealtime } from "@/hooks/use-realtime";
+import { useRealtimeEvents } from "@/hooks/use-realtime-events";
 import { relativeTime } from "@/lib/utils";
 import type { Tables } from "@/lib/database.types";
-import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 
 type ActivityEntry = Tables<"activity_log"> & { agents?: { name: string } | null };
 
@@ -35,7 +33,6 @@ function formatActionDetail(entry: ActivityEntry): string {
 }
 
 export function TaskActivity({ taskId, workspaceId }: TaskActivityProps) {
-  const supabase = useSupabase();
   const [entries, setEntries] = useState<ActivityEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -43,27 +40,30 @@ export function TaskActivity({ taskId, workspaceId }: TaskActivityProps) {
     let cancelled = false;
     async function fetchActivity() {
       setLoading(true);
-      const { data } = await supabase
-        .from("activity_log")
-        .select("*, agents(name)")
-        .eq("workspace_id", workspaceId)
-        .filter("details->>task_id", "eq", taskId)
-        .order("created_at", { ascending: false });
-      if (!cancelled) {
-        setEntries((data as ActivityEntry[]) ?? []);
-        setLoading(false);
+      try {
+        const res = await fetch(
+          `/api/v1/activity-log?workspace_id=${workspaceId}&task_id=${taskId}`
+        );
+        if (res.ok) {
+          const data = await res.json();
+          if (!cancelled) {
+            setEntries(data ?? []);
+          }
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     }
     fetchActivity();
     return () => {
       cancelled = true;
     };
-  }, [taskId, workspaceId, supabase]);
+  }, [taskId, workspaceId]);
 
-  const handlePayload = useCallback(
-    (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
-      if (payload.eventType === "INSERT") {
-        const newEntry = payload.new as unknown as ActivityEntry;
+  const handleEvent = useCallback(
+    (event: { event: string; new?: Record<string, unknown> }) => {
+      if (event.event === "INSERT") {
+        const newEntry = event.new as unknown as ActivityEntry;
         const details = newEntry.details as Record<string, unknown> | null;
         if (details?.task_id === taskId) {
           setEntries((prev) => [newEntry, ...prev]);
@@ -73,10 +73,9 @@ export function TaskActivity({ taskId, workspaceId }: TaskActivityProps) {
     [taskId]
   );
 
-  useRealtime({
+  useRealtimeEvents({
     table: "activity_log",
-    filter: `workspace_id=eq.${workspaceId}`,
-    onPayload: handlePayload,
+    onEvent: handleEvent,
   });
 
   return (
@@ -95,8 +94,8 @@ export function TaskActivity({ taskId, workspaceId }: TaskActivityProps) {
                   {"\u25C6"} {entry.agents.name}
                 </span>
               )}
-              {entry.user_id && !entry.agent_id && <span>{"\u25CB"} User</span>}
-              <span>{relativeTime(entry.created_at)}</span>
+              {entry.userId && !entry.agentId && <span>{"\u25CB"} User</span>}
+              <span>{relativeTime(entry.createdAt)}</span>
             </div>
           </li>
         ))}

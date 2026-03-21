@@ -1,55 +1,44 @@
-import { createClient } from "@/lib/supabase/client";
-import type { Database } from "@/lib/database.types";
-import type { SupabaseClient } from "@supabase/supabase-js";
-
-type TaskRow = Database["public"]["Tables"]["tasks"]["Row"];
-type TaskDependencyRow = Database["public"]["Tables"]["task_dependencies"]["Row"];
+import { getDb } from "@/lib/db/client";
+import { tasks, taskDependencies } from "@/lib/db/schema";
+import type { Task } from "@/lib/db/types";
+import { eq, and, inArray, sql } from "drizzle-orm";
 
 export interface DependencyGraph {
-  tasks: Record<string, TaskRow>;
+  tasks: Record<string, Task>;
   edges: Array<{ from: string; to: string }>; // from depends on to
-}
-
-function getSupabase(supabase?: SupabaseClient<Database>): SupabaseClient<Database> {
-  return supabase ?? (createClient() as SupabaseClient<Database>);
 }
 
 /**
  * Returns tasks in a project that are ready to be dispatched:
  * all their dependencies are 'completed' and they are still 'pending'.
  */
-export async function getReadyTasks(
-  projectId: string,
-  supabase?: SupabaseClient<Database>
-): Promise<TaskRow[]> {
-  const db = getSupabase(supabase);
+export async function getReadyTasks(projectId: string): Promise<Task[]> {
+  const db = getDb();
 
   // Fetch all pending tasks in the project
-  const { data: pendingTasks, error: tasksError } = await db
-    .from("tasks")
-    .select("*")
-    .eq("project_id", projectId)
-    .eq("status", "pending");
-
-  if (tasksError || !pendingTasks) return [];
+  const pendingTasks = await db
+    .select()
+    .from(tasks)
+    .where(and(eq(tasks.projectId, projectId), eq(tasks.status, "pending")));
 
   if (pendingTasks.length === 0) return [];
 
   const pendingIds = pendingTasks.map((t) => t.id);
 
   // Fetch all dependencies for these tasks
-  const { data: deps, error: depsError } = await db
-    .from("task_dependencies")
-    .select("task_id, depends_on_task_id")
-    .in("task_id", pendingIds);
-
-  if (depsError) return [];
+  const deps = await db
+    .select({
+      taskId: taskDependencies.taskId,
+      dependsOnTaskId: taskDependencies.dependsOnTaskId,
+    })
+    .from(taskDependencies)
+    .where(inArray(taskDependencies.taskId, pendingIds));
 
   // Group dependencies by task_id
   const depsByTask: Record<string, string[]> = {};
-  for (const dep of deps ?? []) {
-    if (!depsByTask[dep.task_id]) depsByTask[dep.task_id] = [];
-    depsByTask[dep.task_id].push(dep.depends_on_task_id);
+  for (const dep of deps) {
+    if (!depsByTask[dep.taskId]) depsByTask[dep.taskId] = [];
+    depsByTask[dep.taskId].push(dep.dependsOnTaskId);
   }
 
   // Tasks with no dependencies are immediately ready
@@ -61,15 +50,13 @@ export async function getReadyTasks(
   // For tasks with dependencies, check if all depends_on tasks are completed
   const allDepIds = [...new Set(tasksWithDeps.flatMap((t) => depsByTask[t.id]))];
 
-  const { data: depTasks, error: depTasksError } = await db
-    .from("tasks")
-    .select("id, status")
-    .in("id", allDepIds);
-
-  if (depTasksError || !depTasks) return tasksWithoutDeps;
+  const depTaskStatuses = await db
+    .select({ id: tasks.id, status: tasks.status })
+    .from(tasks)
+    .where(inArray(tasks.id, allDepIds));
 
   const statusById: Record<string, string> = {};
-  for (const t of depTasks) {
+  for (const t of depTaskStatuses) {
     statusById[t.id] = t.status;
   }
 
@@ -83,67 +70,52 @@ export async function getReadyTasks(
 /**
  * Returns the list of tasks that block a given task (incomplete dependencies).
  */
-export async function getBlockingTasks(
-  taskId: string,
-  supabase?: SupabaseClient<Database>
-): Promise<TaskRow[]> {
-  const db = getSupabase(supabase);
+export async function getBlockingTasks(taskId: string): Promise<Task[]> {
+  const db = getDb();
 
-  const { data: deps, error: depsError } = await db
-    .from("task_dependencies")
-    .select("depends_on_task_id")
-    .eq("task_id", taskId);
+  const deps = await db
+    .select({ dependsOnTaskId: taskDependencies.dependsOnTaskId })
+    .from(taskDependencies)
+    .where(eq(taskDependencies.taskId, taskId));
 
-  if (depsError || !deps || deps.length === 0) return [];
+  if (deps.length === 0) return [];
 
-  const depIds = deps.map((d) => d.depends_on_task_id);
+  const depIds = deps.map((d) => d.dependsOnTaskId);
 
-  const { data: depTasks, error: tasksError } = await db
-    .from("tasks")
-    .select("*")
-    .in("id", depIds)
-    .neq("status", "completed");
-
-  if (tasksError || !depTasks) return [];
-
-  return depTasks;
+  return db
+    .select()
+    .from(tasks)
+    .where(and(inArray(tasks.id, depIds), sql`${tasks.status} != 'completed'`));
 }
 
 /**
  * Returns a structured dependency graph for a project.
  * edges: { from: taskId, to: taskId } means "from depends on to"
  */
-export async function getDependencyGraph(
-  projectId: string,
-  supabase?: SupabaseClient<Database>
-): Promise<DependencyGraph> {
-  const db = getSupabase(supabase);
+export async function getDependencyGraph(projectId: string): Promise<DependencyGraph> {
+  const db = getDb();
 
-  const { data: tasks, error: tasksError } = await db
-    .from("tasks")
-    .select("*")
-    .eq("project_id", projectId);
+  const projectTasks = await db.select().from(tasks).where(eq(tasks.projectId, projectId));
 
-  if (tasksError || !tasks) return { tasks: {}, edges: [] };
-
-  const tasksById: Record<string, TaskRow> = {};
-  for (const t of tasks) {
+  const tasksById: Record<string, Task> = {};
+  for (const t of projectTasks) {
     tasksById[t.id] = t;
   }
 
-  const taskIds = tasks.map((t) => t.id);
+  const taskIds = projectTasks.map((t) => t.id);
   if (taskIds.length === 0) return { tasks: tasksById, edges: [] };
 
-  const { data: deps, error: depsError } = await db
-    .from("task_dependencies")
-    .select("task_id, depends_on_task_id")
-    .in("task_id", taskIds);
-
-  if (depsError || !deps) return { tasks: tasksById, edges: [] };
+  const deps = await db
+    .select({
+      taskId: taskDependencies.taskId,
+      dependsOnTaskId: taskDependencies.dependsOnTaskId,
+    })
+    .from(taskDependencies)
+    .where(inArray(taskDependencies.taskId, taskIds));
 
   const edges = deps.map((d) => ({
-    from: d.task_id,
-    to: d.depends_on_task_id,
+    from: d.taskId,
+    to: d.dependsOnTaskId,
   }));
 
   return { tasks: tasksById, edges };
@@ -152,11 +124,8 @@ export async function getDependencyGraph(
 /**
  * Returns true if all dependencies for a task are satisfied (completed).
  */
-export async function canTaskStart(
-  taskId: string,
-  supabase?: SupabaseClient<Database>
-): Promise<boolean> {
-  const blocking = await getBlockingTasks(taskId, supabase);
+export async function canTaskStart(taskId: string): Promise<boolean> {
+  const blocking = await getBlockingTasks(taskId);
   return blocking.length === 0;
 }
 
@@ -164,27 +133,17 @@ export async function canTaskStart(
  * Returns tasks that depend on the given task (tasks that would be
  * unblocked when this task completes).
  */
-export async function getDownstreamTasks(
-  taskId: string,
-  supabase?: SupabaseClient<Database>
-): Promise<TaskRow[]> {
-  const db = getSupabase(supabase);
+export async function getDownstreamTasks(taskId: string): Promise<Task[]> {
+  const db = getDb();
 
-  const { data: deps, error: depsError } = await db
-    .from("task_dependencies")
-    .select("task_id")
-    .eq("depends_on_task_id", taskId);
+  const deps = await db
+    .select({ taskId: taskDependencies.taskId })
+    .from(taskDependencies)
+    .where(eq(taskDependencies.dependsOnTaskId, taskId));
 
-  if (depsError || !deps || deps.length === 0) return [];
+  if (deps.length === 0) return [];
 
-  const downstreamIds = deps.map((d) => d.task_id);
+  const downstreamIds = deps.map((d) => d.taskId);
 
-  const { data: downstreamTasks, error: tasksError } = await db
-    .from("tasks")
-    .select("*")
-    .in("id", downstreamIds);
-
-  if (tasksError || !downstreamTasks) return [];
-
-  return downstreamTasks;
+  return db.select().from(tasks).where(inArray(tasks.id, downstreamIds));
 }

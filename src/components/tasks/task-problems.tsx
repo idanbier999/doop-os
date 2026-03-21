@@ -1,15 +1,14 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { useSupabase } from "@/hooks/use-supabase";
+import { useRouter } from "next/navigation";
 import { useWorkspace } from "@/contexts/workspace-context";
 import { useNotifications } from "@/contexts/notification-context";
-import { useRealtime } from "@/hooks/use-realtime";
+import { useRealtimeEvents } from "@/hooks/use-realtime-events";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { relativeTime } from "@/lib/utils";
 import type { Tables } from "@/lib/database.types";
-import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 
 type Problem = Tables<"problems"> & { agents?: { name: string } | null };
 
@@ -23,69 +22,69 @@ export function TaskProblems({ taskId }: TaskProblemsProps) {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const { userId, workspaceId } = useWorkspace();
   const { addToast } = useNotifications();
-  const supabase = useSupabase();
+  const router = useRouter();
 
   useEffect(() => {
     let cancelled = false;
     async function fetchProblems() {
       setLoading(true);
-      const { data } = await supabase
-        .from("problems")
-        .select("*, agents(name)")
-        .eq("task_id", taskId)
-        .order("created_at", { ascending: false });
-      if (!cancelled) {
-        setProblems((data as Problem[]) ?? []);
-        setLoading(false);
+      try {
+        const res = await fetch(`/api/v1/problems?task_id=${taskId}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (!cancelled) {
+            setProblems(data ?? []);
+          }
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     }
     fetchProblems();
     return () => {
       cancelled = true;
     };
-  }, [taskId, supabase]);
+  }, [taskId]);
 
-  const handlePayload = useCallback(
-    (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
-      if (payload.eventType === "INSERT") {
-        const newProblem = payload.new as unknown as Problem;
-        if (newProblem.task_id === taskId) {
+  const handleEvent = useCallback(
+    (event: { event: string; new?: Record<string, unknown>; old?: Record<string, unknown> }) => {
+      if (event.event === "INSERT") {
+        const newProblem = event.new as unknown as Problem;
+        if (newProblem.taskId === taskId) {
           setProblems((prev) => [newProblem, ...prev]);
         }
-      } else if (payload.eventType === "UPDATE") {
-        const updated = payload.new as unknown as Problem;
+      } else if (event.event === "UPDATE") {
+        const updated = event.new as unknown as Problem;
         setProblems((prev) => prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p)));
-      } else if (payload.eventType === "DELETE") {
-        const deleted = payload.old as unknown as { id: string };
+      } else if (event.event === "DELETE") {
+        const deleted = event.old as unknown as { id: string };
         setProblems((prev) => prev.filter((p) => p.id !== deleted.id));
       }
     },
     [taskId]
   );
 
-  useRealtime({
+  useRealtimeEvents({
     table: "problems",
-    filter: `task_id=eq.${taskId}`,
-    onPayload: handlePayload,
+    onEvent: handleEvent,
   });
 
   const updateStatus = async (problemId: string, status: string) => {
     setActionLoading(problemId);
     try {
-      const updateData: Record<string, string> = { status };
-      if (status === "resolved" || status === "dismissed") {
-        updateData.resolved_by = userId;
-        updateData.resolved_at = new Date().toISOString();
-      }
-      await supabase.from("problems").update(updateData).eq("id", problemId);
-      const problem = problems.find((p) => p.id === problemId);
-      await supabase.from("activity_log").insert({
-        workspace_id: workspaceId,
-        agent_id: problem?.agent_id ?? null,
-        user_id: userId,
-        action: `problem_${status}`,
-        details: { problem_id: problemId, task_id: taskId, title: problem?.title },
+      const res = await fetch(`/api/v1/problems`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          problemId,
+          status,
+          resolvedBy: status === "resolved" || status === "dismissed" ? userId : undefined,
+          workspaceId,
+          taskId,
+        }),
       });
+      if (!res.ok) throw new Error("Failed to update");
+      router.refresh();
     } catch {
       addToast({
         type: "warning",
@@ -118,7 +117,7 @@ export function TaskProblems({ taskId }: TaskProblemsProps) {
             )}
             <div className="flex items-center justify-between mt-2">
               <span className="text-xs text-mac-gray">
-                {problem.agents?.name ?? "Unknown agent"} -- {relativeTime(problem.created_at)}
+                {problem.agents?.name ?? "Unknown agent"} -- {relativeTime(problem.createdAt)}
               </span>
               <div className="flex gap-1">
                 {problem.status === "open" && (

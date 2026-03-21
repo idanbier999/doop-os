@@ -1,4 +1,4 @@
-import type { Tables } from "./database.types";
+import type { Task } from "./db/types";
 
 export type TaskAgent = {
   agent_id: string;
@@ -6,7 +6,7 @@ export type TaskAgent = {
   agents: { name: string };
 };
 
-export type TaskWithAgents = Tables<"tasks"> & {
+export type TaskWithAgents = Task & {
   agents?: { name: string } | null;
   task_agents?: TaskAgent[];
 };

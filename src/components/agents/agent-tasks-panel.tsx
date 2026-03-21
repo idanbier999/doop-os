@@ -1,12 +1,11 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { useRealtime } from "@/hooks/use-realtime";
+import { useRealtimeEvents } from "@/hooks/use-realtime-events";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardBody } from "@/components/ui/card";
 import { relativeTime } from "@/lib/utils";
 import type { Tables } from "@/lib/database.types";
-import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 
 interface AgentTasksPanelProps {
   agentId: string;
@@ -16,25 +15,24 @@ interface AgentTasksPanelProps {
 export function AgentTasksPanel({ agentId, initialTasks }: AgentTasksPanelProps) {
   const [tasks, setTasks] = useState<Tables<"tasks">[]>(initialTasks);
 
-  const handlePayload = useCallback(
-    (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
-      if (payload.eventType === "INSERT") {
-        const newTask = payload.new as Tables<"tasks">;
-        if (newTask.agent_id === agentId) {
+  const handleEvent = useCallback(
+    (event: { event: string; new?: Record<string, unknown> }) => {
+      if (event.event === "INSERT") {
+        const newTask = event.new as Tables<"tasks">;
+        if (newTask.agentId === agentId) {
           setTasks((prev) => [newTask, ...prev]);
         }
-      } else if (payload.eventType === "UPDATE") {
-        const updated = payload.new as Tables<"tasks">;
+      } else if (event.event === "UPDATE") {
+        const updated = event.new as Tables<"tasks">;
         setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
       }
     },
     [agentId]
   );
 
-  useRealtime({
+  useRealtimeEvents({
     table: "tasks",
-    filter: `agent_id=eq.${agentId}`,
-    onPayload: handlePayload,
+    onEvent: handleEvent,
   });
 
   return (
@@ -63,7 +61,7 @@ export function AgentTasksPanel({ agentId, initialTasks }: AgentTasksPanelProps)
                 {task.description && (
                   <p className="mt-0.5 text-xs text-mac-gray line-clamp-2">{task.description}</p>
                 )}
-                <p className="mt-1 text-xs text-mac-dark-gray">{relativeTime(task.created_at)}</p>
+                <p className="mt-1 text-xs text-mac-dark-gray">{relativeTime(task.createdAt)}</p>
               </li>
             ))}
           </ul>

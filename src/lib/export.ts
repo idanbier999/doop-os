@@ -1,6 +1,3 @@
-import type { Tables } from "@/lib/database.types";
-import type { Json } from "@/lib/database.types";
-
 // ---------------------------------------------------------------------------
 // Public interface
 // ---------------------------------------------------------------------------
@@ -14,28 +11,30 @@ export interface ActivityExportEntry {
 }
 
 // ---------------------------------------------------------------------------
-// Raw Supabase row shape (activity_log joined with agents)
+// Raw row shape (activity_log joined with agents)
 // ---------------------------------------------------------------------------
 
-type ActivityEntry = Tables<"activity_log"> & {
+type ActivityEntry = {
+  created_at?: Date | string | null;
+  createdAt?: Date | string | null;
+  action: string;
+  details: unknown;
+  user_id?: string | null;
+  userId?: string | null;
   agents?: { name: string } | null;
+  agentName?: string | null;
 };
 
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
 
+type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+
 /**
- * Flatten a Json value into a human-readable string suitable for a CSV cell.
- *
- * Rules:
- *  - null / undefined  → ""
- *  - primitive         → String(value)
- *  - plain object      → "key=value" pairs joined by "; "
- *                        If a value is itself non-primitive, JSON.stringify it.
- *  - array / complex   → JSON.stringify
+ * Flatten a JSON value into a human-readable string suitable for a CSV cell.
  */
-function flattenDetails(details: Json | null | undefined): string {
+function flattenDetails(details: unknown): string {
   if (details === null || details === undefined) {
     return "";
   }
@@ -45,16 +44,16 @@ function flattenDetails(details: Json | null | undefined): string {
     return String(details);
   }
 
-  // Arrays → JSON
+  // Arrays
   if (Array.isArray(details)) {
     return JSON.stringify(details);
   }
 
-  // Plain object → dot-notation key=value pairs
+  // Plain object
   if (typeof details === "object") {
     const pairs: string[] = [];
 
-    for (const [key, value] of Object.entries(details)) {
+    for (const [key, value] of Object.entries(details as Record<string, unknown>)) {
       if (value === null || value === undefined) {
         pairs.push(`${key}=`);
       } else if (
@@ -64,7 +63,6 @@ function flattenDetails(details: Json | null | undefined): string {
       ) {
         pairs.push(`${key}=${value}`);
       } else {
-        // Nested object or array — stringify the value inline
         pairs.push(`${key}=${JSON.stringify(value)}`);
       }
     }
@@ -78,17 +76,11 @@ function flattenDetails(details: Json | null | undefined): string {
 
 /**
  * Escape a single value for safe inclusion in a CSV cell.
- *
- * RFC 4180: wrap in double-quotes if the value contains a comma, double-quote,
- * or newline. Double up any internal double-quotes.
- *
- * Also neutralizes CSV formula injection by prefixing values that start with
- * dangerous characters (=, +, -, @, \t, \r) with a single quote.
  */
 function escapeCsvValue(value: string): string {
   let safe = value;
 
-  // Neutralize formula injection — prefix with single-quote
+  // Neutralize formula injection
   if (/^[=+\-@\t\r]/.test(safe)) {
     safe = "'" + safe;
   }
@@ -117,7 +109,6 @@ function triggerDownload(content: string, filename: string, mimeType: string): v
   anchor.click();
   document.body.removeChild(anchor);
 
-  // Release the object URL after a short delay to let the download start
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
@@ -126,24 +117,25 @@ function triggerDownload(content: string, filename: string, mimeType: string): v
 // ---------------------------------------------------------------------------
 
 /**
- * Map raw Supabase activity_log rows (optionally joined with agents) into the
+ * Map raw activity_log rows (optionally joined with agents) into the
  * flat ActivityExportEntry shape used by both export functions.
  */
 export function toExportEntries(entries: ActivityEntry[]): ActivityExportEntry[] {
   return entries.map((entry) => {
     let timestamp: string;
-    if (entry.created_at) {
-      const d = new Date(entry.created_at);
-      timestamp = isNaN(d.getTime()) ? entry.created_at : d.toISOString();
+    const dateValue = entry.created_at ?? entry.createdAt;
+    if (dateValue) {
+      const d = new Date(dateValue);
+      timestamp = isNaN(d.getTime()) ? String(dateValue) : d.toISOString();
     } else {
       timestamp = "";
     }
 
-    const agent_name = entry.agents?.name ?? "System";
+    const agent_name = entry.agents?.name ?? entry.agentName ?? "System";
 
     const details = flattenDetails(entry.details);
 
-    const user = entry.user_id ?? "";
+    const user = entry.user_id ?? entry.userId ?? "";
 
     return {
       timestamp,
@@ -167,13 +159,6 @@ const CSV_COLUMNS: Array<keyof ActivityExportEntry> = [
   "user",
 ];
 
-/**
- * Serialize an array of ActivityExportEntry records to CSV and trigger a
- * browser file download.
- *
- * @param data     - The records to export.
- * @param filename - The suggested filename (e.g. "activity-2026-02-20.csv").
- */
 export function exportToCSV(data: ActivityExportEntry[], filename: string): void {
   const headerRow = CSV_COLUMNS.join(",");
 
@@ -190,13 +175,6 @@ export function exportToCSV(data: ActivityExportEntry[], filename: string): void
 // Public: exportToJSON
 // ---------------------------------------------------------------------------
 
-/**
- * Serialize an array of ActivityExportEntry records to pretty-printed JSON and
- * trigger a browser file download.
- *
- * @param data     - The records to export.
- * @param filename - The suggested filename (e.g. "activity-2026-02-20.json").
- */
 export function exportToJSON(data: ActivityExportEntry[], filename: string): void {
   const json = JSON.stringify(data, null, 2);
   triggerDownload(json, filename, "application/json");

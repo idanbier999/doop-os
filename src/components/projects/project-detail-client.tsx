@@ -2,8 +2,7 @@
 
 import { useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { useRealtime } from "@/hooks/use-realtime";
-import { useSupabase } from "@/hooks/use-supabase";
+import { useRealtimeEvents } from "@/hooks/use-realtime-events";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
@@ -25,7 +24,7 @@ import {
   dispatchTaskToAgent,
 } from "@/app/dashboard/projects/actions";
 import type { Tables } from "@/lib/database.types";
-import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
+import type { ChangeEvent } from "@/hooks/use-realtime-events";
 
 type Project = Tables<"projects"> & {
   lead_agent?: { id: string; name: string } | null;
@@ -36,7 +35,7 @@ type ProjectAgent = Tables<"project_agents"> & {
     name: string;
     health: string;
     stage: string;
-    webhook_url?: string | null;
+    webhookUrl?: string | null;
   };
 };
 type Task = Tables<"tasks"> & {
@@ -84,9 +83,9 @@ export interface ProjectDetailClientProps {
   initialDependencies: TaskDependency[];
   initialFiles: ProjectFile[];
   initialActivity: ActivityEntry[];
-  initialProblems: { id: string; task_id: string | null; severity: string; status: string }[];
+  initialProblems: { id: string; taskId: string | null; severity: string; status: string }[];
   workspaceAgents: { id: string; name: string; health: string; stage: string }[];
-  webhookStats: { agent_id: string; status: string }[];
+  webhookStats: { agentId: string; status: string }[];
   userRole: string;
   workspaceId: string;
 }
@@ -103,7 +102,6 @@ export function ProjectDetailClient({
   webhookStats,
   workspaceId,
 }: ProjectDetailClientProps) {
-  const supabase = useSupabase();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [project, setProject] = useState<Project>(initialProject);
@@ -124,103 +122,66 @@ export function ProjectDetailClient({
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  // Realtime handlers
-  const handleProjectUpdate = useCallback(
-    (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
-      if (payload.eventType === "UPDATE") {
-        setProject((prev) => ({ ...prev, ...(payload.new as Partial<Project>) }));
-      }
-    },
-    []
-  );
+  // Realtime handlers — SSE-based
+  const handleProjectEvent = useCallback((event: ChangeEvent) => {
+    if (event.table !== "projects") return;
+    if (event.event === "UPDATE") {
+      setProject((prev) => ({ ...prev, ...(event.new as Partial<Project>) }));
+    }
+  }, []);
 
-  const handleTaskUpdate = useCallback(
-    async (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
-      if (payload.eventType === "INSERT") {
-        const raw = payload.new as Task;
-        // Re-fetch with join so task_agents enrichment is included
-        const { data } = await supabase
-          .from("tasks")
-          .select("*, task_agents(agent_id, role, agents(name))")
-          .eq("id", raw.id)
-          .single();
-        if (data) {
-          setTasks((prev) => {
-            const idx = prev.findIndex((t) => t.id === data.id);
-            if (idx >= 0) {
-              // Replace optimistic entry with enriched data
-              const next = [...prev];
-              next[idx] = data as Task;
-              return next;
-            }
-            return [data as Task, ...prev];
-          });
-        }
-      } else if (payload.eventType === "UPDATE") {
-        const updated = payload.new as Task;
-        // Preserve task_agents — realtime payloads don't include joined data
+  const handleTaskEvent = useCallback(
+    (event: ChangeEvent) => {
+      if (event.table !== "tasks") return;
+      if (event.event === "INSERT") {
+        const raw = event.new as Task;
+        if (raw.projectId !== project.id) return;
+        // SSE payloads don't include joined data — trigger server re-fetch
+        router.refresh();
+      } else if (event.event === "UPDATE") {
+        const updated = event.new as Task;
+        // Preserve task_agents — SSE payloads don't include joined data
         setTasks((prev) =>
           prev.map((t) =>
             t.id === updated.id ? { ...t, ...updated, task_agents: t.task_agents } : t
           )
         );
-      } else if (payload.eventType === "DELETE") {
-        const deleted = payload.old as { id: string };
+      } else if (event.event === "DELETE") {
+        const deleted = event.old as { id: string };
         setTasks((prev) => prev.filter((t) => t.id !== deleted.id));
       }
     },
-    [supabase]
+    [project.id, router]
   );
 
-  const handleAgentUpdate = useCallback(
-    (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
-      if (payload.eventType === "INSERT") {
-        // Can't easily reconstruct full agent object from payload; skip for now
-      } else if (payload.eventType === "UPDATE") {
-        const updated = payload.new as Partial<ProjectAgent> & { id: string };
-        setProjectAgents((prev) =>
-          prev.map((pa) => (pa.id === updated.id ? { ...pa, ...updated } : pa))
-        );
-      } else if (payload.eventType === "DELETE") {
-        const deleted = payload.old as { id: string };
-        setProjectAgents((prev) => prev.filter((pa) => pa.id !== deleted.id));
-      }
-    },
-    []
-  );
+  const handleAgentEvent = useCallback((event: ChangeEvent) => {
+    if (event.table !== "project_agents") return;
+    if (event.event === "UPDATE") {
+      const updated = event.new as Partial<ProjectAgent> & { id: string };
+      setProjectAgents((prev) =>
+        prev.map((pa) => (pa.id === updated.id ? { ...pa, ...updated } : pa))
+      );
+    } else if (event.event === "DELETE") {
+      const deleted = event.old as { id: string };
+      setProjectAgents((prev) => prev.filter((pa) => pa.id !== deleted.id));
+    }
+  }, []);
 
-  const handleFileUpdate = useCallback(
-    (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
-      if (payload.eventType === "INSERT") {
-        setFiles((prev) => [payload.new as ProjectFile, ...prev]);
-      } else if (payload.eventType === "DELETE") {
-        const deleted = payload.old as { id: string };
-        setFiles((prev) => prev.filter((f) => f.id !== deleted.id));
-      }
-    },
-    []
-  );
+  const handleFileEvent = useCallback((event: ChangeEvent) => {
+    if (event.table !== "project_files") return;
+    if (event.event === "INSERT") {
+      setFiles((prev) => [event.new as ProjectFile, ...prev]);
+    } else if (event.event === "DELETE") {
+      const deleted = event.old as { id: string };
+      setFiles((prev) => prev.filter((f) => f.id !== deleted.id));
+    }
+  }, []);
 
-  useRealtime({
-    table: "projects",
-    filter: `id=eq.${project.id}`,
-    onPayload: handleProjectUpdate,
-  });
-  useRealtime({
-    table: "tasks",
-    filter: `project_id=eq.${project.id}`,
-    onPayload: handleTaskUpdate,
-  });
-  useRealtime({
-    table: "project_agents",
-    filter: `project_id=eq.${project.id}`,
-    onPayload: handleAgentUpdate,
-  });
-  useRealtime({
-    table: "project_files",
-    filter: `project_id=eq.${project.id}`,
-    onPayload: handleFileUpdate,
-  });
+  // Single SSE connection filters on the client side by table
+  useRealtimeEvents({ table: "projects", onEvent: handleProjectEvent });
+  useRealtimeEvents({ table: "tasks", onEvent: handleTaskEvent });
+  useRealtimeEvents({ table: "project_agents", onEvent: handleAgentEvent });
+  useRealtimeEvents({ table: "project_files", onEvent: handleFileEvent });
 
   // Status change handler
   const handleStatusChange = useCallback(
@@ -255,8 +216,8 @@ export function ProjectDetailClient({
   const problemCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const p of initialProblems) {
-      if (p.task_id) {
-        counts[p.task_id] = (counts[p.task_id] || 0) + 1;
+      if (p.taskId) {
+        counts[p.taskId] = (counts[p.taskId] || 0) + 1;
       }
     }
     return counts;
@@ -266,13 +227,12 @@ export function ProjectDetailClient({
   const agentProgressInfos: ProjectAgentInfo[] = useMemo(() => {
     return projectAgents.map((pa) => {
       const agentTasks = tasks.filter(
-        (t) =>
-          t.agent_id === pa.agent_id || t.task_agents?.some((ta) => ta.agent_id === pa.agent_id)
+        (t) => t.agentId === pa.agentId || t.task_agents?.some((ta) => ta.agent_id === pa.agentId)
       );
       const completedTasks = agentTasks.filter((t) => t.status === "completed");
       const currentTask = agentTasks.find((t) => t.status === "in_progress") || null;
 
-      const agentWebhooks = webhookStats.filter((w) => w.agent_id === pa.agent_id);
+      const agentWebhooks = webhookStats.filter((w) => w.agentId === pa.agentId);
       const webhookStatus = {
         total: agentWebhooks.length,
         delivered: agentWebhooks.filter((w) => w.status === "delivered").length,
@@ -282,7 +242,7 @@ export function ProjectDetailClient({
 
       return {
         id: pa.id,
-        agent_id: pa.agent_id,
+        agent_id: pa.agentId,
         role: pa.role as "lead" | "member",
         status: pa.status as "idle" | "working" | "done" | "error",
         agent: pa.agent,
@@ -331,7 +291,7 @@ export function ProjectDetailClient({
                 {project.status.charAt(0).toUpperCase() + project.status.slice(1)}
               </Badge>
               <span className="text-xs text-mac-gray font-[family-name:var(--font-pixel)] border border-mac-border px-2 py-0.5 rounded-md">
-                {project.orchestration_mode === "lead_agent" ? "Lead Agent" : "Manual"}
+                {project.orchestrationMode === "lead_agent" ? "Lead Agent" : "Manual"}
               </span>
             </div>
           </div>
@@ -443,7 +403,6 @@ export function ProjectDetailClient({
             files={files}
             workspaceId={workspaceId}
             projectId={project.id}
-            supabase={supabase}
             onAddFiles={() => setAddFilesOpen(true)}
           />
         )}
@@ -533,16 +492,16 @@ function OverviewTab({ project }: { project: Project }) {
           <div className="p-4 space-y-2">
             <div className="flex items-center justify-between text-sm">
               <span className="text-mac-gray font-[family-name:var(--font-pixel)]">Created</span>
-              <span className="text-mac-dark-gray">{formatDate(project.created_at)}</span>
+              <span className="text-mac-dark-gray">{formatDate(project.createdAt)}</span>
             </div>
             <div className="flex items-center justify-between text-sm">
               <span className="text-mac-gray font-[family-name:var(--font-pixel)]">Updated</span>
-              <span className="text-mac-dark-gray">{formatDate(project.updated_at)}</span>
+              <span className="text-mac-dark-gray">{formatDate(project.updatedAt)}</span>
             </div>
             <div className="flex items-center justify-between text-sm">
               <span className="text-mac-gray font-[family-name:var(--font-pixel)]">Mode</span>
               <span className="text-mac-dark-gray capitalize">
-                {project.orchestration_mode.replace("_", " ")}
+                {project.orchestrationMode.replace("_", " ")}
               </span>
             </div>
           </div>
@@ -600,8 +559,8 @@ function TasksTab({
   const blockedBy = useMemo(() => {
     const map: Record<string, string[]> = {};
     for (const dep of dependencies) {
-      if (!map[dep.task_id]) map[dep.task_id] = [];
-      map[dep.task_id].push(dep.depends_on_task_id);
+      if (!map[dep.taskId]) map[dep.taskId] = [];
+      map[dep.taskId].push(dep.dependsOnTaskId);
     }
     return map;
   }, [dependencies]);
@@ -609,8 +568,8 @@ function TasksTab({
   const blocks = useMemo(() => {
     const map: Record<string, string[]> = {};
     for (const dep of dependencies) {
-      if (!map[dep.depends_on_task_id]) map[dep.depends_on_task_id] = [];
-      map[dep.depends_on_task_id].push(dep.task_id);
+      if (!map[dep.dependsOnTaskId]) map[dep.dependsOnTaskId] = [];
+      map[dep.dependsOnTaskId].push(dep.taskId);
     }
     return map;
   }, [dependencies]);
@@ -702,7 +661,7 @@ function TasksTab({
                   <div className="flex items-center gap-1.5 shrink-0">
                     <Badge variant="status" value={task.status} />
                     <Badge variant="priority" value={task.priority} />
-                    {task.agent_id && task.status === "pending" && (
+                    {task.agentId && task.status === "pending" && (
                       <Button
                         size="sm"
                         variant="secondary"
@@ -731,7 +690,7 @@ function TasksTab({
                     </span>
                   )}
                   {taskBlocks.length > 0 && <span>Blocks: {taskBlocks.join(", ")}</span>}
-                  <span className="ml-auto">{relativeTime(task.created_at)}</span>
+                  <span className="ml-auto">{relativeTime(task.createdAt)}</span>
                 </div>
               </div>
             );
@@ -748,13 +707,11 @@ function FilesTab({
   files,
   workspaceId,
   projectId,
-  supabase,
   onAddFiles,
 }: {
   files: ProjectFile[];
   workspaceId: string;
   projectId: string;
-  supabase: ReturnType<typeof useSupabase>;
   onAddFiles: () => void;
 }) {
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
@@ -763,20 +720,21 @@ function FilesTab({
     async (file: ProjectFile) => {
       setDownloadingId(file.id);
       try {
-        const { data } = await supabase.storage
-          .from("project-files")
-          .createSignedUrl(file.file_path, 3600);
-        if (data?.signedUrl) {
-          const a = document.createElement("a");
-          a.href = data.signedUrl;
-          a.download = file.file_name;
-          a.click();
+        const res = await fetch(`/api/v1/projects/${projectId}/files/${file.id}/download`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.signedUrl) {
+            const a = document.createElement("a");
+            a.href = data.signedUrl;
+            a.download = file.fileName;
+            a.click();
+          }
         }
       } finally {
         setDownloadingId(null);
       }
     },
-    [supabase]
+    [projectId]
   );
 
   return (
@@ -803,10 +761,10 @@ function FilesTab({
             >
               <span className="text-lg shrink-0">&#128196;</span>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold text-mac-black truncate">{file.file_name}</p>
+                <p className="text-sm font-bold text-mac-black truncate">{file.fileName}</p>
                 <p className="text-xs text-mac-gray">
-                  {file.file_size ? formatFileSize(file.file_size) : "Unknown size"} &bull;{" "}
-                  {relativeTime(file.created_at)}
+                  {file.fileSize ? formatFileSize(file.fileSize) : "Unknown size"} &bull;{" "}
+                  {relativeTime(file.createdAt)}
                 </p>
               </div>
               <Button
@@ -885,14 +843,14 @@ function ActivityTab({
                       {entry.action.replace(/_/g, " ")}
                     </span>
                     <span className="text-xs text-mac-gray ml-auto shrink-0">
-                      {relativeTime(entry.created_at)}
+                      {relativeTime(entry.createdAt)}
                     </span>
                   </div>
-                  {entry.details && (
+                  {entry.details != null ? (
                     <p className="text-xs text-mac-dark-gray mt-0.5 truncate">
                       {formatActivityDetails(entry.details as Record<string, unknown>)}
                     </p>
-                  )}
+                  ) : null}
                 </div>
               </li>
             ))}
@@ -962,18 +920,18 @@ function CreateTaskModal({
         if (result.success) {
           onCreated({
             id: result.taskId!,
-            workspace_id: workspaceId,
-            project_id: projectId,
+            workspaceId,
+            projectId,
             title: title.trim(),
             description: description.trim() || null,
             priority,
             status: "pending",
-            agent_id: assignedAgentId || null,
-            assigned_to: null,
+            agentId: assignedAgentId || null,
+            assignedTo: null,
             result: null,
-            created_by: null,
-            created_at: new Date().toISOString(),
-            updated_at: null,
+            createdBy: null,
+            createdAt: new Date(),
+            updatedAt: null,
             task_agents: [],
           });
           addToast({ type: "info", title: "Task created", description: title.trim() });
@@ -1067,7 +1025,7 @@ function CreateTaskModal({
             >
               <option value="">Unassigned</option>
               {projectAgents.map((pa) => (
-                <option key={pa.agent_id} value={pa.agent_id}>
+                <option key={pa.agentId} value={pa.agentId}>
                   {pa.agent.name}
                 </option>
               ))}

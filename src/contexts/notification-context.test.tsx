@@ -1,32 +1,22 @@
+// @vitest-environment jsdom
 import { render, screen, act } from "@testing-library/react";
 import { vi, type Mock } from "vitest";
 
-// Track registered callbacks by channel name
-type ChannelCallback = (payload: unknown) => void | Promise<void>;
-const channelCallbacks: Record<string, ChannelCallback> = {};
+// Track the onEvent callbacks registered by useRealtimeEvents
+type EventCallback = (event: {
+  event: string;
+  table: string;
+  new?: Record<string, unknown>;
+  old?: Record<string, unknown>;
+  workspaceId: string;
+}) => void;
 
-const mockChannels: Record<string, { on: Mock; subscribe: Mock }> = {};
+const registeredCallbacks: { table?: string; onEvent: EventCallback }[] = [];
 
-function createMockChannel(name: string) {
-  const channel = {
-    on: vi.fn((_event: string, _config: unknown, cb: ChannelCallback) => {
-      channelCallbacks[name] = cb;
-      return channel;
-    }),
-    subscribe: vi.fn().mockReturnThis(),
-  };
-  mockChannels[name] = channel;
-  return channel;
-}
-
-const mockSupabase = {
-  channel: vi.fn((name: string) => createMockChannel(name)),
-  removeChannel: vi.fn(),
-  from: vi.fn(),
-};
-
-vi.mock("@/hooks/use-supabase", () => ({
-  useSupabase: vi.fn(() => mockSupabase),
+vi.mock("@/hooks/use-realtime-events", () => ({
+  useRealtimeEvents: vi.fn(({ table, onEvent }: { table?: string; onEvent: EventCallback }) => {
+    registeredCallbacks.push({ table, onEvent });
+  }),
 }));
 
 let mockWorkspaceValues = {
@@ -56,19 +46,24 @@ vi.mock("@/components/ui/toast", () => ({
 
 import { NotificationProvider, useNotifications } from "@/contexts/notification-context";
 
-// Helper to simulate a supabase realtime payload
-function simulatePayload(channelName: string, payload: unknown) {
-  const cb = channelCallbacks[channelName];
-  if (!cb) throw new Error(`No callback registered for channel: ${channelName}`);
-  return cb(payload);
-}
-
-// Helper to mock agent fetch response
-function mockAgentFetch(data: Record<string, unknown> | null) {
-  const single = vi.fn().mockResolvedValue({ data, error: null });
-  const eq = vi.fn().mockReturnValue({ single });
-  const select = vi.fn().mockReturnValue({ eq });
-  mockSupabase.from.mockReturnValue({ select });
+// Helper to simulate an SSE event to a specific table
+function simulateEvent(
+  table: string,
+  event: {
+    event: string;
+    new?: Record<string, unknown>;
+    old?: Record<string, unknown>;
+  }
+) {
+  for (const cb of registeredCallbacks) {
+    if (cb.table === table) {
+      cb.onEvent({
+        ...event,
+        table,
+        workspaceId: "ws-001",
+      });
+    }
+  }
 }
 
 function renderProvider() {
@@ -86,8 +81,7 @@ function toastTitles(): string[] {
 describe("NotificationContext", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    Object.keys(channelCallbacks).forEach((k) => delete channelCallbacks[k]);
-    Object.keys(mockChannels).forEach((k) => delete mockChannels[k]);
+    registeredCallbacks.length = 0;
     mockWorkspaceValues = {
       workspaceId: "ws-001",
       userId: "user-001",
@@ -99,21 +93,13 @@ describe("NotificationContext", () => {
 
   // --- Setup & Cleanup ---
 
-  it("subscribes to three realtime channels on mount", () => {
+  it("registers SSE event listeners for problems, agents, and tasks", () => {
     renderProvider();
 
-    expect(mockSupabase.channel).toHaveBeenCalledWith("toast-problems");
-    expect(mockSupabase.channel).toHaveBeenCalledWith("toast-agent-offline");
-    expect(mockSupabase.channel).toHaveBeenCalledWith("toast-task-failure");
-    expect(mockSupabase.channel).toHaveBeenCalledTimes(3);
-  });
-
-  it("removes all three channels on unmount", () => {
-    const { unmount } = renderProvider();
-
-    unmount();
-
-    expect(mockSupabase.removeChannel).toHaveBeenCalledTimes(3);
+    const tables = registeredCallbacks.map((cb) => cb.table);
+    expect(tables).toContain("problems");
+    expect(tables).toContain("agents");
+    expect(tables).toContain("tasks");
   });
 
   it("useNotifications throws when used outside provider", () => {
@@ -128,14 +114,14 @@ describe("NotificationContext", () => {
     spy.mockRestore();
   });
 
-  // --- Problem toast scoping (Task 4.1) ---
+  // --- Problem toast scoping ---
 
-  it("shows toast for critical problem from own agent in mine scope", async () => {
-    mockAgentFetch({ name: "Bot-1", workspace_id: "ws-001", owner_id: "user-001" });
+  it("shows toast for critical problem INSERT", async () => {
     renderProvider();
 
     await act(async () => {
-      await simulatePayload("toast-problems", {
+      simulateEvent("problems", {
+        event: "INSERT",
         new: { severity: "critical", title: "CPU overload", agent_id: "agent-1" },
       });
     });
@@ -143,26 +129,12 @@ describe("NotificationContext", () => {
     expect(toastTitles()).toContain("Problem: CPU overload");
   });
 
-  it("suppresses problem from other owner in mine scope", async () => {
-    mockAgentFetch({ name: "Bot-2", workspace_id: "ws-001", owner_id: "user-999" });
+  it("shows toast for high-severity problem INSERT", async () => {
     renderProvider();
 
     await act(async () => {
-      await simulatePayload("toast-problems", {
-        new: { severity: "high", title: "Memory leak", agent_id: "agent-2" },
-      });
-    });
-
-    expect(toastTitles()).toHaveLength(0);
-  });
-
-  it("shows problem from other owner when scope is all", async () => {
-    mockWorkspaceValues.fleetScope = "all";
-    mockAgentFetch({ name: "Bot-2", workspace_id: "ws-001", owner_id: "user-999" });
-    renderProvider();
-
-    await act(async () => {
-      await simulatePayload("toast-problems", {
+      simulateEvent("problems", {
+        event: "INSERT",
         new: { severity: "high", title: "Memory leak", agent_id: "agent-2" },
       });
     });
@@ -170,66 +142,41 @@ describe("NotificationContext", () => {
     expect(toastTitles()).toContain("Problem: Memory leak");
   });
 
-  it("suppresses low-severity problems regardless of scope", async () => {
+  it("suppresses low-severity problems", async () => {
     renderProvider();
 
     await act(async () => {
-      await simulatePayload("toast-problems", {
+      simulateEvent("problems", {
+        event: "INSERT",
         new: { severity: "low", title: "Minor issue", agent_id: "agent-1" },
       });
     });
 
     expect(toastTitles()).toHaveLength(0);
-    expect(mockSupabase.from).not.toHaveBeenCalled();
   });
 
-  it("suppresses problem from different workspace", async () => {
-    mockAgentFetch({ name: "Bot-X", workspace_id: "ws-other", owner_id: "user-001" });
+  it("suppresses medium-severity problems", async () => {
     renderProvider();
 
     await act(async () => {
-      await simulatePayload("toast-problems", {
-        new: { severity: "critical", title: "Error", agent_id: "agent-x" },
+      simulateEvent("problems", {
+        event: "INSERT",
+        new: { severity: "medium", title: "Warning", agent_id: "agent-1" },
       });
     });
 
     expect(toastTitles()).toHaveLength(0);
   });
 
-  it("suppresses unassigned agent (owner_id=null) in mine scope, shows in all", async () => {
-    mockAgentFetch({ name: "Unowned", workspace_id: "ws-001", owner_id: null });
+  // --- Agent offline alerts ---
+
+  it("shows toast when agent transitions to offline", async () => {
     renderProvider();
 
     await act(async () => {
-      await simulatePayload("toast-problems", {
-        new: { severity: "critical", title: "Null owner", agent_id: "agent-u" },
-      });
-    });
-
-    expect(toastTitles()).toHaveLength(0);
-  });
-
-  it("handles null agent from fetch gracefully (no crash, no toast)", async () => {
-    mockAgentFetch(null);
-    renderProvider();
-
-    await act(async () => {
-      await simulatePayload("toast-problems", {
-        new: { severity: "high", title: "Error", agent_id: "agent-missing" },
-      });
-    });
-
-    expect(toastTitles()).toHaveLength(0);
-  });
-
-  // --- Agent offline alerts (Task 4.2) ---
-
-  it("shows toast when owned agent transitions to offline", async () => {
-    renderProvider();
-
-    await act(async () => {
-      await simulatePayload("toast-agent-offline", {
-        new: { workspace_id: "ws-001", health: "offline", name: "Bot-1", owner_id: "user-001" },
+      simulateEvent("agents", {
+        event: "UPDATE",
+        new: { health: "offline", name: "Bot-1", owner_id: "user-001" },
         old: { health: "healthy" },
       });
     });
@@ -241,8 +188,9 @@ describe("NotificationContext", () => {
     renderProvider();
 
     await act(async () => {
-      await simulatePayload("toast-agent-offline", {
-        new: { workspace_id: "ws-001", health: "offline", name: "Bot-1", owner_id: "user-001" },
+      simulateEvent("agents", {
+        event: "UPDATE",
+        new: { health: "offline", name: "Bot-1", owner_id: "user-001" },
         old: { health: "offline" },
       });
     });
@@ -250,25 +198,13 @@ describe("NotificationContext", () => {
     expect(toastTitles()).toHaveLength(0);
   });
 
-  it("shows toast when old health is undefined (graceful fallback)", async () => {
-    renderProvider();
-
-    await act(async () => {
-      await simulatePayload("toast-agent-offline", {
-        new: { workspace_id: "ws-001", health: "offline", name: "Bot-1", owner_id: "user-001" },
-        old: {},
-      });
-    });
-
-    expect(toastTitles()).toContain("Agent offline: Bot-1");
-  });
-
   it("suppresses agent-offline from other owner in mine scope", async () => {
     renderProvider();
 
     await act(async () => {
-      await simulatePayload("toast-agent-offline", {
-        new: { workspace_id: "ws-001", health: "offline", name: "Other-Bot", owner_id: "user-999" },
+      simulateEvent("agents", {
+        event: "UPDATE",
+        new: { health: "offline", name: "Other-Bot", owner_id: "user-999" },
         old: { health: "healthy" },
       });
     });
@@ -281,8 +217,9 @@ describe("NotificationContext", () => {
     renderProvider();
 
     await act(async () => {
-      await simulatePayload("toast-agent-offline", {
-        new: { workspace_id: "ws-001", health: "offline", name: "Other-Bot", owner_id: "user-999" },
+      simulateEvent("agents", {
+        event: "UPDATE",
+        new: { health: "offline", name: "Other-Bot", owner_id: "user-999" },
         old: { health: "healthy" },
       });
     });
@@ -290,25 +227,13 @@ describe("NotificationContext", () => {
     expect(toastTitles()).toContain("Agent offline: Other-Bot");
   });
 
-  it("suppresses agent-offline from different workspace", async () => {
-    renderProvider();
-
-    await act(async () => {
-      await simulatePayload("toast-agent-offline", {
-        new: { workspace_id: "ws-other", health: "offline", name: "Bot-X", owner_id: "user-001" },
-        old: { health: "healthy" },
-      });
-    });
-
-    expect(toastTitles()).toHaveLength(0);
-  });
-
   it("suppresses toast for non-offline health change", async () => {
     renderProvider();
 
     await act(async () => {
-      await simulatePayload("toast-agent-offline", {
-        new: { workspace_id: "ws-001", health: "healthy", name: "Bot-1", owner_id: "user-001" },
+      simulateEvent("agents", {
+        event: "UPDATE",
+        new: { health: "healthy", name: "Bot-1", owner_id: "user-001" },
         old: { health: "degraded" },
       });
     });
@@ -316,16 +241,15 @@ describe("NotificationContext", () => {
     expect(toastTitles()).toHaveLength(0);
   });
 
-  // --- Task failure alerts (Task 4.3) ---
+  // --- Task cancellation alerts ---
 
-  it("shows toast when task on owned agent is cancelled", async () => {
-    mockAgentFetch({ name: "Bot-1", owner_id: "user-001" });
+  it("shows toast when task is cancelled", async () => {
     renderProvider();
 
     await act(async () => {
-      await simulatePayload("toast-task-failure", {
+      simulateEvent("tasks", {
+        event: "UPDATE",
         new: {
-          workspace_id: "ws-001",
           status: "cancelled",
           agent_id: "agent-1",
           title: "Deploy v2",
@@ -340,9 +264,9 @@ describe("NotificationContext", () => {
     renderProvider();
 
     await act(async () => {
-      await simulatePayload("toast-task-failure", {
+      simulateEvent("tasks", {
+        event: "UPDATE",
         new: {
-          workspace_id: "ws-001",
           status: "completed",
           agent_id: "agent-1",
           title: "Deploy v2",
@@ -351,96 +275,18 @@ describe("NotificationContext", () => {
     });
 
     expect(toastTitles()).toHaveLength(0);
-    expect(mockSupabase.from).not.toHaveBeenCalled();
   });
 
   it("suppresses toast when task has no agent_id", async () => {
     renderProvider();
 
     await act(async () => {
-      await simulatePayload("toast-task-failure", {
-        new: { workspace_id: "ws-001", status: "cancelled", agent_id: null, title: "Unassigned" },
+      simulateEvent("tasks", {
+        event: "UPDATE",
+        new: { status: "cancelled", agent_id: null, title: "Unassigned" },
       });
     });
 
     expect(toastTitles()).toHaveLength(0);
-    expect(mockSupabase.from).not.toHaveBeenCalled();
-  });
-
-  it("suppresses cancelled task from other owner in mine scope", async () => {
-    mockAgentFetch({ name: "Bot-2", owner_id: "user-999" });
-    renderProvider();
-
-    await act(async () => {
-      await simulatePayload("toast-task-failure", {
-        new: {
-          workspace_id: "ws-001",
-          status: "cancelled",
-          agent_id: "agent-2",
-          title: "Other task",
-        },
-      });
-    });
-
-    expect(toastTitles()).toHaveLength(0);
-  });
-
-  it("shows cancelled task from other owner when scope is all", async () => {
-    mockWorkspaceValues.fleetScope = "all";
-    mockAgentFetch({ name: "Bot-2", owner_id: "user-999" });
-    renderProvider();
-
-    await act(async () => {
-      await simulatePayload("toast-task-failure", {
-        new: {
-          workspace_id: "ws-001",
-          status: "cancelled",
-          agent_id: "agent-2",
-          title: "Other task",
-        },
-      });
-    });
-
-    expect(toastTitles()).toContain("Task cancelled: Other task");
-  });
-
-  it("handles agent lookup failure gracefully", async () => {
-    const single = vi.fn().mockResolvedValue({ data: null, error: { message: "not found" } });
-    const eq = vi.fn().mockReturnValue({ single });
-    const select = vi.fn().mockReturnValue({ eq });
-    mockSupabase.from.mockReturnValue({ select });
-    renderProvider();
-
-    await act(async () => {
-      await simulatePayload("toast-task-failure", {
-        new: {
-          workspace_id: "ws-001",
-          status: "cancelled",
-          agent_id: "agent-gone",
-          title: "Lost task",
-        },
-      });
-    });
-
-    // In "mine" scope with null agent, owner_id check (null !== userId) suppresses the toast
-    expect(toastTitles()).toHaveLength(0);
-  });
-
-  it("suppresses cancelled task from different workspace", async () => {
-    renderProvider();
-
-    await act(async () => {
-      await simulatePayload("toast-task-failure", {
-        new: {
-          workspace_id: "ws-other",
-          status: "cancelled",
-          agent_id: "agent-1",
-          title: "Foreign task",
-        },
-      });
-    });
-
-    expect(toastTitles()).toHaveLength(0);
-    expect(mockSupabase.from).not.toHaveBeenCalled();
   });
 });

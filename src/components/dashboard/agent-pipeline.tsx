@@ -1,12 +1,11 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { useRealtime } from "@/hooks/use-realtime";
+import { useRealtimeEvents } from "@/hooks/use-realtime-events";
 import { useWorkspace } from "@/contexts/workspace-context";
 import { AgentCard } from "@/components/dashboard/agent-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import type { Tables } from "@/lib/database.types";
-import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 
 const STAGES = ["idle", "running", "blocked", "completed", "error"] as const;
 
@@ -34,18 +33,18 @@ export function AgentPipeline({ initialAgents }: AgentPipelineProps) {
   const [agents, setAgents] = useState<Tables<"agents">[]>(initialAgents);
   const { workspaceId } = useWorkspace();
 
-  const handlePayload = useCallback(
-    (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
-      if (payload.eventType === "INSERT") {
-        const newAgent = payload.new as Tables<"agents">;
-        if (newAgent.workspace_id === workspaceId) {
+  const handleEvent = useCallback(
+    (event: { event: string; new?: Record<string, unknown>; old?: Record<string, unknown> }) => {
+      if (event.event === "INSERT") {
+        const newAgent = event.new as Tables<"agents">;
+        if (newAgent.workspaceId === workspaceId) {
           setAgents((prev) => [...prev, newAgent]);
         }
-      } else if (payload.eventType === "UPDATE") {
-        const updated = payload.new as Tables<"agents">;
+      } else if (event.event === "UPDATE") {
+        const updated = event.new as Tables<"agents">;
         setAgents((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
-      } else if (payload.eventType === "DELETE") {
-        const old = payload.old as { id?: string };
+      } else if (event.event === "DELETE") {
+        const old = event.old as { id?: string };
         if (old.id) {
           setAgents((prev) => prev.filter((a) => a.id !== old.id));
         }
@@ -54,9 +53,9 @@ export function AgentPipeline({ initialAgents }: AgentPipelineProps) {
     [workspaceId]
   );
 
-  useRealtime({
+  useRealtimeEvents({
     table: "agents",
-    onPayload: handlePayload,
+    onEvent: handleEvent,
   });
 
   const grouped = STAGES.reduce(

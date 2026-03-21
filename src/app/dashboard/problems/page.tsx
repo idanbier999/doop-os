@@ -1,45 +1,49 @@
 import type { Metadata } from "next";
-import { getAuthenticatedSupabase } from "@/lib/supabase/server-with-auth";
-import { redirect } from "next/navigation";
+import { requireWorkspaceMembership } from "@/lib/workspace";
+import { getDb } from "@/lib/db/client";
+import { agents as agentsTable, problems as problemsTable } from "@/lib/db/schema";
+import { eq, inArray, desc } from "drizzle-orm";
 import { ProblemsTable } from "@/components/problems/problems-table";
 
 export const metadata: Metadata = { title: "Problems | Doop" };
 
 export default async function ProblemsPage() {
-  const { user, supabase } = await getAuthenticatedSupabase();
-  if (!user || !supabase) redirect("/login");
+  const { workspace } = await requireWorkspaceMembership();
+  const workspaceId = workspace.id;
 
-  const { data: membership } = await supabase
-    .from("workspace_members")
-    .select("workspace_id")
-    .eq("user_id", user.id)
-    .limit(1)
-    .single();
+  const db = getDb();
 
-  if (!membership) redirect("/onboarding");
+  // Fetch workspace-scoped agents
+  const agentRows = await db
+    .select({ id: agentsTable.id, name: agentsTable.name })
+    .from(agentsTable)
+    .where(eq(agentsTable.workspaceId, workspaceId));
 
-  const workspaceId = membership.workspace_id;
+  const agentIds = agentRows.map((a) => a.id);
 
-  // Fetch workspace-scoped agents first
-  const agentsResult = await supabase
-    .from("agents")
-    .select("id, name")
-    .eq("workspace_id", workspaceId);
-
-  const agents = agentsResult.data ?? [];
-  const agentIds = agents.map((a) => a.id);
-
-  // Fetch problems scoped to workspace agents
-  const problemsResult =
+  // Fetch problems scoped to workspace agents, with agent info
+  const problemRows =
     agentIds.length > 0
-      ? await supabase
-          .from("problems")
-          .select("*, agents(name, agent_type)")
-          .in("agent_id", agentIds)
-          .order("created_at", { ascending: false })
-      : { data: [] };
+      ? await db
+          .select({
+            problem: problemsTable,
+            agentName: agentsTable.name,
+            agentType: agentsTable.agentType,
+          })
+          .from(problemsTable)
+          .innerJoin(agentsTable, eq(problemsTable.agentId, agentsTable.id))
+          .where(inArray(problemsTable.agentId, agentIds))
+          .orderBy(desc(problemsTable.createdAt))
+      : [];
 
-  const problems = problemsResult.data ?? [];
+  // Merge problem data with nested agents object matching old shape
+  const serializedProblems = problemRows.map((row) => ({
+    ...row.problem,
+    agents: {
+      name: row.agentName,
+      agent_type: row.agentType,
+    },
+  }));
 
   return (
     <div className="space-y-6">
@@ -50,7 +54,8 @@ export default async function ProblemsPage() {
         </p>
       </div>
 
-      <ProblemsTable initialProblems={problems} agents={agents} />
+      {/* @ts-expect-error -- component expects snake_case fields; we pass camelCase from Drizzle + nested agents */}
+      <ProblemsTable initialProblems={serializedProblems} agents={agentRows} />
     </div>
   );
 }
