@@ -90,16 +90,31 @@ async function main() {
   const { Pool } = require("pg");
   const pool = new Pool({ connectionString: databaseUrl });
   for (const file of migrationFiles) {
-    const sql = readFileSync(join(drizzleDir, file), "utf8");
-    try {
-      await pool.query(sql);
-      console.log(`[doop] Applied ${file}`);
-    } catch (e) {
-      if (e.message?.includes("already exists")) {
-        console.log(`[doop] ${file} already applied.`);
-      } else {
-        console.error(`[doop] Migration error in ${file}:`, e.message);
+    const raw = readFileSync(join(drizzleDir, file), "utf8");
+    // Drizzle Kit uses "--> statement-breakpoint" to separate statements
+    const statements = raw
+      .split("--> statement-breakpoint")
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    let applied = 0;
+    let skipped = 0;
+    for (const stmt of statements) {
+      try {
+        await pool.query(stmt);
+        applied++;
+      } catch (e) {
+        if (e.message?.includes("already exists")) {
+          skipped++;
+        } else {
+          console.error(`[doop] Migration error in ${file}:`, e.message);
+        }
       }
+    }
+    if (skipped > 0) {
+      console.log(`[doop] ${file}: ${applied} applied, ${skipped} already exist.`);
+    } else {
+      console.log(`[doop] Applied ${file} (${applied} statements)`);
     }
   }
   console.log("[doop] Migrations complete.");

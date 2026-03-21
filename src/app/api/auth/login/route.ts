@@ -28,40 +28,45 @@ function checkRateLimit(ip: string): boolean {
 }
 
 export async function POST(request: NextRequest) {
-  const ip =
-    request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? "unknown";
+  try {
+    const ip =
+      request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? "unknown";
 
-  if (!checkRateLimit(ip)) {
-    return NextResponse.json({ error: "Too many attempts" }, { status: 429 });
+    if (!checkRateLimit(ip)) {
+      return NextResponse.json({ error: "Too many attempts" }, { status: 429 });
+    }
+
+    const body = await request.json();
+    const name = (body.name as string)?.trim();
+
+    if (!name || name.length < 1 || name.length > 100) {
+      return NextResponse.json({ error: "Name must be 1-100 characters" }, { status: 400 });
+    }
+
+    const db = getDb();
+
+    // Atomic find-or-create: insert if not exists, fetch if already exists
+    const [inserted] = await db
+      .insert(users)
+      .values({ name })
+      .onConflictDoNothing({ target: users.name })
+      .returning();
+
+    let userId: string;
+    if (inserted) {
+      userId = inserted.id;
+    } else {
+      const [existing] = await db.select().from(users).where(eq(users.name, name)).limit(1);
+      userId = existing.id;
+    }
+
+    // Create session
+    const token = await createSession(userId);
+    await setSessionCookie(token);
+
+    return NextResponse.json({ success: true, userId });
+  } catch (err) {
+    console.error("[login] Error:", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
-
-  const body = await request.json();
-  const name = (body.name as string)?.trim();
-
-  if (!name || name.length < 1 || name.length > 100) {
-    return NextResponse.json({ error: "Name must be 1-100 characters" }, { status: 400 });
-  }
-
-  const db = getDb();
-
-  // Atomic find-or-create: insert if not exists, fetch if already exists
-  const [inserted] = await db
-    .insert(users)
-    .values({ name })
-    .onConflictDoNothing({ target: users.name })
-    .returning();
-
-  let userId: string;
-  if (inserted) {
-    userId = inserted.id;
-  } else {
-    const [existing] = await db.select().from(users).where(eq(users.name, name)).limit(1);
-    userId = existing.id;
-  }
-
-  // Create session
-  const token = await createSession(userId);
-  await setSessionCookie(token);
-
-  return NextResponse.json({ success: true, userId });
 }
