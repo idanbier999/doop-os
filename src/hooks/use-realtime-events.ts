@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef } from "react";
 
 type ChangeEvent = {
   table: string;
@@ -21,10 +21,15 @@ const INITIAL_RECONNECT_DELAY_MS = 1_000;
 
 export function useRealtimeEvents({ table, onEvent, enabled = true }: UseRealtimeEventsOptions) {
   const onEventRef = useRef(onEvent);
-  onEventRef.current = onEvent;
-
   const tableRef = useRef(table);
-  tableRef.current = table;
+
+  useEffect(() => {
+    onEventRef.current = onEvent;
+  }, [onEvent]);
+
+  useEffect(() => {
+    tableRef.current = table;
+  }, [table]);
 
   useEffect(() => {
     if (!enabled) return;

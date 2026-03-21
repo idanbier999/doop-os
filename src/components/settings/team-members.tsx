@@ -45,8 +45,9 @@ export function TeamMembers() {
   }, [workspaceId]);
 
   useEffect(() => {
-    loadMembers();
-  }, [loadMembers]);
+    void loadMembers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceId]);
 
   const handleRoleChange = async (memberId: string, newRole: string) => {
     if (newRole !== "admin" && newRole !== "member") return;

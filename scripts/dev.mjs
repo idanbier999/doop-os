@@ -146,9 +146,7 @@ async function main() {
 
 async function seed(pool) {
   // Create default admin user
-  const userResult = await pool.query(
-    `INSERT INTO "user" (name) VALUES ('admin') RETURNING id`
-  );
+  const userResult = await pool.query(`INSERT INTO "user" (name) VALUES ('admin') RETURNING id`);
   const userId = userResult.rows[0].id;
 
   // Create default workspace
