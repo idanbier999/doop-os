@@ -43,7 +43,7 @@
     "drizzle-kit": "^0.31.9",
     "embedded-postgres": "^18.3.0-beta.16",
     "eslint": "^9",
-    "eslint-config-next": "16.1.6",
+    "eslint-config-next": "16.2.1",
     "husky": "^9.1.7",
     "jsdom": "^25.0.1",
     "lint-staged": "^16.4.0",
